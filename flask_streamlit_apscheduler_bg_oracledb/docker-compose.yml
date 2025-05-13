@@ -16,28 +16,18 @@ services:
     volumes:
       # 볼륨 마운트 설정: '호스트_경로:컨테이너_경로'
       # 네 요청대로 호스트의 /src/pybatch/app 경로를 컨테이너의 /app/ 경로에 마운트해.
-      # 주의: 이 설정은 컨테이너가 시작될 때 /app/ 안의 기존 내용(Dockerfile의 COPY로 복사된 내용)을
-      # 호스트의 /src/pybatch/app 내용으로 덮어쓰게 돼.
-      # 주로 로컬 개발 환경에서 코드 변경사항을 바로 반영하고 싶을 때 사용하고,
-      # 실제 Openshift 운영 환경에서는 보통 Dockerfile의 COPY 명령어만 사용해서 코드를 이미지에 포함시키는 게 일반적이야.
-      # - /src/pybatch/app:/app/ # 이 라인을 추가하면 돼.
-      # 로컬 개발 시 코드 수정을 바로 반영하려면 위 라인의 주석을 해제해!
-      # 운영 환경에서는 이 라인은 주석 처리하거나 삭제하는 게 좋아!
+      - /src/pybatch/app:/app/ # 이 라인을 추가하면 돼.
 
-      # 만약 설정 파일(nginx.conf, supervisord.conf)도 로컬에서 수정하며 테스트하고 싶다면 아래처럼 추가할 수 있어.
-      # - ./nginx.conf:/etc/nginx/nginx.conf:ro # 읽기 전용(ro)으로 마운트
-      # - ./supervisord.conf:/etc/supervisord.conf:ro
+      # 설정 파일(nginx.conf, supervisord.conf)도 로컬에서 수정 테스트위한 설정
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro # 읽기 전용(ro)으로 마운트
+      - ./supervisord.conf:/etc/supervisord.conf:ro
 
     environment:
-      # 환경 변수를 설정해줘. DB 접속 정보 같은 민감한 정보는 여기에 설정하는 게 코드에 직접 넣는 것보다 안전해!
-      # 여기서는 docker-compose를 실행하는 환경의 DB_USER, DB_PASSWORD, DB_DSN 환경 변수 값을 가져오도록 설정했어.
-      # 또는 .env 파일을 만들어서 그 안에 'DB_USER=your_username' 같이 정의해둘 수도 있어.
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_DSN: ${DB_DSN}
-      # Python이 print 문 등을 버퍼링하지 않고 바로 출력하게 해서 로그를 실시간으로 볼 수 있게 해줘.
       PYTHONUNBUFFERED: 1
-    # 컨테이너 종료 시 재시작 정책 (선택 사항)
+
     restart: unless-stopped # 컨테이너가 에러로 종료되거나 명시적으로 중지하지 않는 한 계속 다시 시작해.
 
 # Openshift 배포 관련 추가 참고 사항:
