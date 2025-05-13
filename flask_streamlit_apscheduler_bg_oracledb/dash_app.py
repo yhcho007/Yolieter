@@ -55,7 +55,6 @@ app.layout = html.Div([
     html.H1("Task Monitor"),
     
     html.Div([
-        dcc.Input(id='taskid-input', type='text', placeholder='Task ID'),
         dcc.Input(id='taskname-input', type='text', placeholder='Task Name'),
         dcc.Input(id='starttime-input', type='text', placeholder='Start Time (YYYY-MM-DD HH:MM:SS)'),
         dcc.Input(id='status-input', type='text', placeholder='Task Status'),
