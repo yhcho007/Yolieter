@@ -92,6 +92,18 @@ supervisor==6.3.0
 pip install -r requirements.txt
 ```
 
+## docker-compose up 으로 기동하기
+이 docker-compose.yml 파일이 있는 디렉토리에서 터미널을 열고 docker-compose up --build 명령어를 실행하면 이미지를 빌드하고 컨테이너를 실행할 수 있어! 
+--build는 변경사항이 있을 때 이미지를 다시 빌드하라는 뜻이야. 백그라운드로 실행하고 싶으면 -d 옵션을 추가해서 docker-compose up -d --build 라고 하면 돼.
+자, 이렇게 해서 네 Flask+Dash 앱을 Openshift 환경에 배포하기 위한 기본적인 Dockerfile과 docker-compose.yml, 설정 파일들을 만들어봤어! 😊
+
+이 파일들과 함께 네 파이썬 코드(main.py, dash_app.py, sch.py)를 같은 디렉토리에 넣고 docker-compose up --build 로 로컬에서 먼저 테스트해보는 걸 추천해! 
+포트 5000으로 API (http://localhost:5000/swagger 로 Swagger UI 확인 가능!) 접근이 되는지, 8501 포트로 Dash 앱이 잘 뜨는지 확인해봐!
+
+Openshift 배포 자체는 oc 명령어나 웹 콘솔을 사용하게 될 텐데, 이 Dockerfile을 바탕으로 이미지를 빌드하고 Openshift DeploymentConfig/Deployment를 생성하면 돼. 
+Openshift 환경에서의 세부 설정(Route, Secret, Resource Limit 등)은 프로젝트 특성에 맞게 추가로 설정해야 해
+
+
 ## 라이센스
 이 프로젝트는 MIT 라이센스 하에 배포됩니다.
 
