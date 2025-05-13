@@ -16,7 +16,7 @@
 
 ```bash
 python main.py
-
+```
 ### 2. streamlit_app.py
 streamlit_app.py는 Streamlit을 사용하여 웹 기반 사용자 인터페이스를 제공합니다. 사용자들은 이 인터페이스를 통해 작업을 쉽게 관리하고, 등록할 수 있습니다.
 
@@ -29,7 +29,7 @@ Streamlit 애플리케이션은 main.py에서 자동으로 실행됩니다. 별�
 
 ```bash
 streamlit run streamlit_app.py
-
+```
 ### 3. sch.py
 sch.py는 백그라운드에서 실행되는 스크립트로, 주기적으로 특정 작업을 수행합니다. 이 스크립트는 주로 데이터베이스와 상호작용하여 작업을 처리하는 데 사용됩니다.
 
@@ -38,7 +38,7 @@ sch.py는 백그라운드에서 실행되는 스크립트로, 주기적으로 �
 
 ```bash
 python sch.py
-
+```
 ### 4. app.py
 app.py는 특정 작업을 수행하는 데 필요한 로직을 포함하고 있습니다. 이 스크립트는 taskid 인자를 받아서 작업을 처리합니다.
 
@@ -47,7 +47,7 @@ app.py는 특정 작업을 수행하는 데 필요한 로직을 포함하고 있
 
 ```bash
 python app.py --taskid <taskid>
-
+```
 ## 요구 사항
 Python 3.x
 Flask
