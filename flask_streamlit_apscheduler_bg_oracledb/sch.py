@@ -29,7 +29,7 @@ def check_and_run_tasks():
         tasks = fetch_tasks(connection)
         
         for _, row in tasks.iterrows():
-            if row['subprocee_starttime'].strftime("%Y-%m-%d %H:%M:%S") == current_time:
+            if row['subprocee_starttime'].strftime("%Y-%m-%d %H:%M:%S") >= current_time:
                 run_app_py(row['taskid'])  # taskid를 인자로 넘김
                 update_task_status(connection, row['taskid'], 'I')
 
