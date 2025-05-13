@@ -3,8 +3,6 @@ import pandas as pd
 import subprocess
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
-import os
-import signal
 
 def fetch_tasks(connection):
     query = "SELECT taskid, taskname, subprocee_starttime, task_status FROM SCH WHERE task_status != 'S'"
