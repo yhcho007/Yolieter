@@ -59,9 +59,19 @@ Streamlit
 ## 설치
 프로젝트를 클론한 후, 필요한 패키지를 설치합니다.
 
+### requirements.txt
+```bash
+Flask==2.0.3
+Flask-RESTPlus==0.13.0
+cx_Oracle==8.3.0
+pandas==1.3.4
+streamlit==1.3.0
+```
+이 내용을 requirements.txt 파일로 저장하면, 필요한 패키지를 쉽게 설치할 수 있습니다. 설치하려면 다음 명령어를 사용할 수 있습니다
+
 ```bash
 pip install -r requirements.txt
-
+```
 ## 라이센스
 이 프로젝트는 MIT 라이센스 하에 배포됩니다.
 
