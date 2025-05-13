@@ -52,6 +52,19 @@ app.py는 기동시간에 특정 작업을 수행하는 데 필요한 로직을 
 ```bash
 python app.py --taskid <taskid>
 ```
+
+### 테이블 정의
+```bash
+CREATE TABLE task (
+    taskid VARCHAR2(50) PRIMARY KEY,
+    taskname VARCHAR2(100) NOT NULL,
+    subprocee_starttime TIMESTAMP NOT NULL,
+    task_status VARCHAR2(20) DEFAULT 'I' NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    changed_at TIMESTAMP
+);
+```
+
 ## 요구 사항
 Python 3.x
 Flask
@@ -80,6 +93,7 @@ psutil==5.8.0
 ```bash
 pip install -r requirements.txt
 ```
+
 ## 라이센스
 이 프로젝트는 MIT 라이센스 하에 배포됩니다.
 
