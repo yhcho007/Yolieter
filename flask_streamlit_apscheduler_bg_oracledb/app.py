@@ -3,7 +3,6 @@ import pandas as pd
 from datetime import datetime
 import sys
 import signal
-import os
 
 # 전역 변수로 taskid와 connection 정의
 taskid = None
