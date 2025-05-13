@@ -1,12 +1,13 @@
 '''
-기동 : streamlit run streamlit_app.py
-stramlet 페이지 확인 : http://localhost:8501
+API 서버 실행: python main.py
+Streamlit 애플리케이션 실행: streamlit run streamlit_app.py
+브라우저에서 http://localhost:8501로 이동하여 애플리케이션 확인.
 
 '''
 import streamlit as st
 import pandas as pd
 import requests
-import matplotlib.pyplot as plt
+import plotly.express as px
 
 def run_streamlit():
     """Streamlit application to display tasks."""
@@ -47,16 +48,15 @@ def run_streamlit():
             status_counts = df['task_status'].value_counts().reset_index()
             status_counts.columns = ['task_status', 'count']
 
-            # 막대 그래프 표시
+            # Plotly 막대 그래프 표시
             st.write("### Task Status Count")
-            fig, ax = plt.subplots()
-            ax.bar(status_counts['task_status'], status_counts['count'])
-            ax.set_xlabel('Task Status')
-            ax.set_ylabel('Count')
-            ax.set_title('Count of Tasks by Status')
-            st.pyplot(fig)
+            fig = px.bar(status_counts, x='task_status', y='count', 
+                         labels={'task_status': 'Task Status', 'count': 'Count'},
+                         title='Count of Tasks by Status')
+            st.plotly_chart(fig)
 
         else:
             st.write("No tasks found.")
     else:
         st.write("Failed to fetch tasks.")
+
