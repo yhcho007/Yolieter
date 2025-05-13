@@ -55,15 +55,14 @@ def main(taskid_input):
     signal.signal(signal.SIGTERM, signal_handler)  # kill 명령
 
     try:
-        # 상태 업데이트
-        update_task_status(connection, taskid, 'S')
-
         # 데이터 가져오기
         data = fetch_data(connection, taskid)
 
         # CSV 파일로 저장
         save_to_csv(data)
 
+        # 상태 업데이트
+        update_task_status(connection, taskid, 'S')
     finally:
         # 종료 시 상태 업데이트
         if connection:
