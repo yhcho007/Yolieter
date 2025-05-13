@@ -9,6 +9,7 @@ import pandas as pd
 import requests
 import plotly.express as px
 import psutil
+import json
 
 app = dash.Dash(__name__)
 
@@ -18,6 +19,13 @@ def fetch_tasks(params):
     if response.status_code == 200:
         return response.json()
     return []
+
+def post_task(data):
+    """Post a new task to the API."""
+    response = requests.post("http://localhost:5000/tasks", json=data)
+    if response.status_code == 200:
+        return response.json()
+    return {"error": "Failed to post task"}
 
 def get_system_metrics():
     """Get system metrics like CPU, memory, and disk usage."""
@@ -46,12 +54,15 @@ def get_system_metrics():
 app.layout = html.Div([
     html.H1("Task Monitor"),
     
-    dcc.Input(id='taskname-filter', type='text', placeholder='Task Name'),
-    dcc.Input(id='starttime-filter', type='text', placeholder='Start Time (YYYYMMDDHHMISS)'),
-    dcc.Input(id='endtime-filter', type='text', placeholder='End Time (YYYYMMDDHHMISS)'),
-    dcc.Input(id='limit-filter', type='number', value=10, placeholder='Limit'),
+    html.Div([
+        dcc.Input(id='taskid-input', type='text', placeholder='Task ID'),
+        dcc.Input(id='taskname-input', type='text', placeholder='Task Name'),
+        dcc.Input(id='starttime-input', type='text', placeholder='Start Time (YYYY-MM-DD HH:MM:SS)'),
+        dcc.Input(id='status-input', type='text', placeholder='Task Status'),
+        html.Button('Submit Task', id='submit-task-button', n_clicks=0),
+    ]),
 
-    html.Button('Submit', id='submit-button', n_clicks=0),
+    html.Div(id='post-task-response', style={'margin-top': '20px', 'margin-bottom': '20px'}),
 
     dcc.Graph(id='task-status-count'),
     dash_table.DataTable(id='task-table'),
@@ -61,24 +72,30 @@ app.layout = html.Div([
 @app.callback(
     [dash.dependencies.Output('task-status-count', 'figure'),
      dash.dependencies.Output('task-table', 'data'),
-     dash.dependencies.Output('system-metrics', 'children')],
-    [dash.dependencies.Input('submit-button', 'n_clicks')],
-    [dash.dependencies.State('taskname-filter', 'value'),
-     dash.dependencies.State('starttime-filter', 'value'),
-     dash.dependencies.State('endtime-filter', 'value'),
-     dash.dependencies.State('limit-filter', 'value')]
+     dash.dependencies.Output('system-metrics', 'children'),
+     dash.dependencies.Output('post-task-response', 'children')],
+    [dash.dependencies.Input('submit-task-button', 'n_clicks')],
+    [dash.dependencies.State('taskid-input', 'value'),
+     dash.dependencies.State('taskname-input', 'value'),
+     dash.dependencies.State('starttime-input', 'value'),
+     dash.dependencies.State('status-input', 'value')]
 )
-def update_output(n_clicks, taskname, starttime, endtime, limit):
-    params = {}
-    if taskname:
-        params['taskname'] = taskname
-    if starttime:
-        params['starttime'] = starttime
-    if endtime:
-        params['endtime'] = endtime
-    if limit:
-        params['limit'] = limit
+def update_output(n_clicks, taskid, taskname, starttime, status):
+    # 새로운 작업 추가
+    if n_clicks > 0 and taskid and taskname and starttime and status:
+        task_data = {
+            "taskid": taskid,
+            "taskname": taskname,
+            "subprocee_starttime": starttime,
+            "task_status": status
+        }
+        post_response = post_task(task_data)
+        post_response_message = f"Task posted: {json.dumps(post_response)}"
+    else:
+        post_response_message = ""
 
+    # 기존 작업 가져오기
+    params = {}
     tasks = fetch_tasks(params)
 
     # 막대 그래프 생성
@@ -115,7 +132,7 @@ def update_output(n_clicks, taskname, starttime, endtime, limit):
     # 메모리 프로세스 데이터
     memory_process_df = pd.DataFrame(memory_processes, columns=['PID', 'Name', 'Memory Usage (MB)'])
 
-    return fig, table_data, metrics + cpu_process_df.to_string(index=False) + "\n" + memory_process_df.to_string(index=False)
+    return fig, table_data, metrics + cpu_process_df.to_string(index=False) + "\n" + memory_process_df.to_string(index=False), post_response_message
 
 if __name__ == '__main__':
     app.run_server(debug=True)
