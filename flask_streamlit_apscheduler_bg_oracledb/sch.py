@@ -10,7 +10,12 @@ def fetch_tasks(connection):
 
 def update_task_status(connection, taskid, status):
     with connection.cursor() as cursor:
-        cursor.execute("UPDATE SCH SET task_status = :status WHERE taskid = :taskid", status=status, taskid=taskid)
+        cursor.execute("""
+            UPDATE task 
+            SET task_status = :status, 
+                changed_at = CURRENT_TIMESTAMP 
+            WHERE taskid = :taskid
+        """, status=status, taskid=taskid)
         connection.commit()
 
 def run_app_py(taskid):
