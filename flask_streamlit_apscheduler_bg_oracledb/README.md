@@ -63,7 +63,7 @@ Streamlit
 ```bash
 Flask==2.0.3
 Flask-RESTPlus==0.13.0
-cx_Oracle==8.3.0
+python-oracledb==1.1.0
 pandas==1.3.4
 streamlit==1.3.0
 ```
