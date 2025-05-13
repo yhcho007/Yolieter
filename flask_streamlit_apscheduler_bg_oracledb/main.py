@@ -8,7 +8,6 @@ POST 요청 예 :
 curl -X POST http://localhost:5000/tasks \
 -H "Content-Type: application/json" \
 -d '{
-    "taskid": "task_001",
     "taskname": "Sample Task",
     "subprocee_starttime": "2025-05-10 01:01:01",
     "task_status": "Pending"
@@ -44,7 +43,6 @@ DB_DSN = 'your_dsn'
 
 # API 모델 정의
 task_model = api.model('Task', {
-    'taskid': fields.String(required=True, description='Task ID'),
     'taskname': fields.String(required=True, description='Task Name'),
     'subprocee_starttime': fields.String(required=True, description='Start Time (YYYY-MM-DD HH24:MI:SS)'),
     'task_status': fields.String(required=True, description='Task Status')
@@ -64,8 +62,7 @@ class TaskResource(Resource):
         with get_db_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    "INSERT INTO SCH (taskid, taskname, subprocee_starttime, task_status) VALUES (:taskid, :taskname, TO_DATE(:subprocee_starttime, 'YYYY-MM-DD HH24:MI:SS'), :task_status)",
-                    taskid=data['taskid'],
+                    "INSERT INTO SCH taskname, subprocee_starttime, task_status) VALUES (:taskid, :taskname, TO_DATE(:subprocee_starttime, 'YYYY-MM-DD HH24:MI:SS'), :task_status)",
                     taskname=data['taskname'],
                     subprocee_starttime=data['subprocee_starttime'],
                     task_status=data['task_status']
@@ -77,6 +74,7 @@ class TaskResource(Resource):
     @api.response(404, 'No tasks found.')
     def get(self):
         """Get tasks with optional filters"""
+        taskid = request.args.get('taskid')
         taskname = request.args.get('taskname')
         starttime = request.args.get('starttime')  # YYYYMMDDHHMISS 형식
         endtime = request.args.get('endtime')      # YYYYMMDDHHMISS 형식
@@ -85,6 +83,9 @@ class TaskResource(Resource):
         query = "SELECT taskid, taskname, subprocee_starttime, task_status FROM SCH WHERE 1=1"
         params = {}
 
+        if taskid:
+            query += " AND taskid = :taskid"
+            params['taskid'] = taskid
         if taskname:
             query += " AND taskname = :taskname"
             params['taskname'] = taskname
