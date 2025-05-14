@@ -125,3 +125,6 @@ ModuleNotFoundError: No module named 'pip._internal'
 위와 같은 에러가 발생하여, 다음과 같이 처리하고 패키지 삭제 후 다시 설치함.
 curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
 python get-pip.py
+
+### 참고한 URL
+[Oracle] Windows 10 오라클 19c 다운로드 및 설치 방법 [Windows](https://source-factory.tistory.com/m/11)
