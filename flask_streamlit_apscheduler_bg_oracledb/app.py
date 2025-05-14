@@ -44,13 +44,8 @@ def main(taskid_input):
     global taskid, connection
     taskid = taskid_input
 
-    # Oracle DB 연결 정보
-    dsn = "your_dsn"  # 데이터 소스 이름
-    user = "your_username"  # 사용자 이름
-    password = "your_password"  # 비밀번호
-
     # 데이터베이스 연결
-    connection = oracledb.connect(user=user, password=password, dsn=dsn)
+    connection = connection = oracledb.connect(user="testcho", password="1234", dsn="127.0.0.1:1521/FREE")
 
     # 종료 신호 처리 등록
     signal.signal(signal.SIGINT, signal_handler)  # Ctrl+C

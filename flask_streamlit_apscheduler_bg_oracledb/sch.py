@@ -32,7 +32,7 @@ def run_app_py(taskid):
 def check_and_run_tasks():
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    with oracledb.connect(user='your_username', password='your_password', dsn='your_dsn') as connection:
+    with oracledb.connect(user="testcho", password="1234", dsn="127.0.0.1:1521/FREE") as connection:
         tasks = fetch_tasks(connection)
         
         for _, row in tasks.iterrows():
