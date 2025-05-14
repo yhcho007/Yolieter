@@ -64,6 +64,23 @@ CREATE TABLE task (
     changed_at TIMESTAMP
 );
 
+-- testcho 계정생성 권한 할당의 예
+CREATE TABLESPACE TEST_TS
+DATAFILE 'C:\app\로그인계정\product\23ai\oradata\FREE\TEST_TS.dbf' 
+SIZE 50 M autoextend ON
+NEXT 1 M maxsize 100 M;
+
+CREATE TEMPORARY TABLESPACE TEST_TS_TEMP 
+TEMPFILE 'C:\app\로그인계정\product\23ai\oradata\FREE\TEST_TS_TMP1.dbf' 
+SIZE 100 M;
+
+alter session set "_ORACLE_SCRIPT"=true;
+
+CREATE USER testcho IDENTIFIED BY 1234
+       DEFAULT   TABLESPACE TEST_TS
+       TEMPORARY TABLESPACE TEST_TS_TEMP;
+
+GRANT RESOURCE, CONNECT,DBA TO testcho;
 ```
 
 ## 요구 사항
