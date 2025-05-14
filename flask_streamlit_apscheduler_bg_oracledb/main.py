@@ -27,9 +27,10 @@ import oracledb
 import pandas as pd
 import subprocess
 import signal
-import os
 import sys
-import time # 프로세스 종료 대기를 위해 추가
+from common.loghandler import LogHandler
+
+logger = LogHandler.getloghandler("main")
 
 app = Flask(__name__)
 # Api 초기화는 그대로!
@@ -53,13 +54,13 @@ background_process = None
 
 def get_db_connection():
     """데이터베이스 연결을 가져오는 함수"""
-    print("DB 연결 시도...")
+    logger.info("DB 연결 시도...")
     try:
         connection = oracledb.connect(user=DB_USER, password=DB_PASSWORD, dsn=DB_DSN)
-        print("DB 연결 성공!")
+        logger.info("DB 연결 성공!")
         return connection
     except Exception as e:
-        print(f"DB 연결 오류: {e}")
+        logger.info(f"DB 연결 오류: {e}")
         return None
 
 
@@ -95,12 +96,12 @@ class TaskResource(Resource):
                 connection.commit()
             return jsonify({"message": "작업이 성공적으로 등록되었어!"}), 201
         except oracledb.Error as e:
-            print(f"데이터베이스 오류: {e}")
+            logger.info(f"데이터베이스 오류: {e}")
             if connection:
                 connection.rollback() # 오류 발생 시 롤백
             return jsonify({"message": f"데이터베이스 작업 중 오류가 발생했어: {e}"}), 500
         except Exception as e:
-             print(f"예상치 못한 오류 발생: {e}")
+             logger.info(f"예상치 못한 오류 발생: {e}")
              return jsonify({"message": f"작업 등록 중 예상치 못한 오류가 발생했어: {e}"}), 500
         finally:
             if connection:
@@ -182,10 +183,10 @@ class TaskResource(Resource):
 
             return jsonify(tasks.to_dict(orient='records')), 200
         except oracledb.Error as e:
-            print(f"데이터베이스 오류: {e}")
+            logger.info(f"데이터베이스 오류: {e}")
             return jsonify({"message": f"데이터베이스 작업 중 오류가 발생했어: {e}"}), 500
         except Exception as e:
-             print(f"예상치 못한 오류 발생: {e}")
+             logger.info(f"예상치 못한 오류 발생: {e}")
              return jsonify({"message": f"작업 조회 중 예상치 못한 오류가 발생했어: {e}"}), 500
         finally:
             if connection:
@@ -195,7 +196,7 @@ class TaskResource(Resource):
 def run_sch_background():
     """sch.py 파이썬 스크립트를 백그라운드로 실행합니다."""
     try:
-        print("sch.py 백그라운드 실행 시도...")
+        logger.info("sch.py 백그라운드 실행 시도...")
         # stdout, stderr을 파이프로 연결해서 나중에 읽거나, 파일로 리다이렉트할 수 있어.
         # 여기선 간단히 DEVNULL로 버리도록 했어.
         process = subprocess.Popen(
@@ -204,46 +205,46 @@ def run_sch_background():
             stderr=subprocess.DEVNULL,
             shell=False # shell=False가 더 안전한 방법이야
         )
-        print(f"sch.py 백그라운드 프로세스 실행됨 (PID: {process.pid})")
+        logger.info(f"sch.py 백그라운드 프로세스 실행됨 (PID: {process.pid})")
         return process
     except FileNotFoundError:
-        print(f"오류: sch.py 파일을 찾을 수 없어.")
+        logger.info(f"오류: sch.py 파일을 찾을 수 없어.")
         return None
     except Exception as e:
-        print(f"sch.py 백그라운드 실행 중 오류 발생: {e}")
+        logger.info(f"sch.py 백그라운드 실행 중 오류 발생: {e}")
         return None
 
 # 프로세스들을 종료하는 함수 (시그널 핸들러 등에서 호출될 수 있어)
 def kill_processes(process):
     """백그라운드 프로세스 및 관련 프로세스를 종료합니다."""
-    print("종료 시그널 수신. 프로세스 정리 시작...")
+    logger.info("종료 시그널 수신. 프로세스 정리 시작...")
     if process and process.poll() is None: # 프로세스가 아직 실행 중인지 확인
-        print(f"백그라운드 sch.py 프로세스 (PID: {process.pid}) 종료 시도...")
+        logger.info(f"백그라운드 sch.py 프로세스 (PID: {process.pid}) 종료 시도...")
         try:
             process.terminate() # 부드러운 종료 시도
             process.wait(timeout=10) # 최대 10초 대기
-            print("sch.py 프로세스 종료 완료.")
+            logger.info("sch.py 프로세스 종료 완료.")
         except subprocess.TimeoutExpired:
-            print("sch.py 프로세스 종료 시간 초과. 강제 종료 시도...")
+            logger.info("sch.py 프로세스 종료 시간 초과. 강제 종료 시도...")
             process.kill() # 강제 종료
             process.wait()
-            print("sch.py 프로세스 강제 종료 완료.")
+            logger.info("sch.py 프로세스 강제 종료 완료.")
         except Exception as e:
-            print(f"sch.py 프로세스 종료 중 오류 발생: {e}")
+            logger.info(f"sch.py 프로세스 종료 중 오류 발생: {e}")
     elif process and process.poll() is not None:
-         print(f"sch.py 프로세스 (PID: {process.pid})는 이미 종료되었어.")
+         logger.info(f"sch.py 프로세스 (PID: {process.pid})는 이미 종료되었어.")
     else:
-         print("실행 중인 sch.py 백그라운드 프로세스가 없었어.")
+         logger.info("실행 중인 sch.py 백그라운드 프로세스가 없었어.")
 
-    print("프로세스 정리 완료.")
+    logger.info("프로세스 정리 완료.")
 
 
 # SIGINT (Ctrl+C) 및 SIGTERM 시그널 핸들러 정의
 def signal_handler(sig, frame):
-    print(f"시그널 {sig} 수신, 종료 시작.")
+    logger.info(f"시그널 {sig} 수신, 종료 시작.")
     global background_process
     kill_processes(background_process)
-    print("애플리케이션 종료.")
+    logger.info("애플리케이션 종료.")
     sys.exit(0)
 
 # 시그널 핸들러 등록
@@ -255,7 +256,7 @@ if __name__ == '__main__':
     # Flask 앱 시작 전에 sch.py 백그라운드 실행
     background_process = run_sch_background()
 
-    print("Flask 서버 시작 중...")
+    logger.info("Flask 서버 시작 중...")
     # Flask 앱 실행
     app.run(debug=False, host='0.0.0.0', port=5000)
 

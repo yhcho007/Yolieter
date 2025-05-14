@@ -3,6 +3,9 @@ import pandas as pd
 from datetime import datetime
 import sys
 import signal
+from common.loghandler import LogHandler
+
+logger = LogHandler.getloghandler("app")
 
 # 전역 변수로 taskid와 connection 정의
 taskid = None
@@ -27,14 +30,14 @@ def save_to_csv(dataframe):
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
     filename = f"{timestamp}.csv"
     dataframe.to_csv(filename, index=False)
-    print(f"Data saved to {filename}")
+    logger.info(f"Data saved to {filename}")
 
 def signal_handler(sig, frame):
     """신호 처리기: 프로세스가 종료될 때 상태 업데이트."""
     global connection
     if connection:
         update_task_status(connection, taskid, 'K')
-    print("Process terminated. Status updated to 'K'.")
+    logger.info("Process terminated. Status updated to 'K'.")
     sys.exit(0)
 
 def main(taskid_input):
@@ -71,7 +74,7 @@ def main(taskid_input):
 if __name__ == "__main__":
     # 커맨드라인 인자로 taskid를 가져옴
     if len(sys.argv) != 2:
-        print("Usage: python app.py <taskid>")
+        logger.info("Usage: python app.py <taskid>")
         sys.exit(1)
 
     taskid = sys.argv[1]
