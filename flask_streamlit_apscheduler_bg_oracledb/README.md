@@ -75,22 +75,23 @@ Python 3.12.3
 
 ### requirements.txt
 ```bash
-Flask==3.1.0
+Flask==3.1.1
 flask_restx==1.3.0
-APScheduler==3.11.0
+APScheduler==4.0.0a6
 oracledb==3.1.0
 pandas==2.2.3
 dash==3.0.4
-plotly==6.0.1
+plotly==6.1.0rc0
 psutil==7.0.0
-gunicorn==22.0.0
-supervisor==6.3.0 
+#gunicorn==22.0.0
+#supervisor==6.3.0
 ```
 이 내용을 requirements.txt 파일로 저장하면, 필요한 패키지를 쉽게 설치할 수 있습니다. 설치하려면 다음 명령어를 사용할 수 있습니다
 
 ```bash
 pip install -r requirements.txt
 ```
+패키지 의존성에 의해 추가적인 패키지 들이 설치 될 수있는데, requirements.txt 로 설치 후 pip freeze > requirements_full.txt 하여 requirements_full.txt 에서 확인 바랍니다. 
 
 ## docker-compose up 으로 기동하기
 이 docker-compose.yml 파일이 있는 디렉토리에서 터미널을 열고 docker-compose up --build 명령어를 실행하면 이미지를 빌드하고 컨테이너를 실행할 수 있어! 
@@ -115,3 +116,12 @@ Openshift 환경에서의 세부 설정(Route, Secret, Resource Limit 등)은 �
 - **요구 사항**: 이 프로젝트를 실행하기 위해 필요한 라이브러리와 패키지를 나열합니다.
 - **설치 방법**: 프로젝트를 설치하는 방법을 안내합니다.
 - **라이센스**: 프로젝트의 라이센스를 명시합니다.
+
+### 에러처리
+#### pip 에러
+from pip._internal.cli.main import main as _main
+ModuleNotFoundError: No module named 'pip._internal'
+
+위와 같은 에러가 발생하여, 다음과 같이 처리하고 패키지 삭제 후 다시 설치함.
+curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+python get-pip.py
