@@ -114,7 +114,6 @@ pip install -r requirements.txt
 ```bash
 pipdeptree -r -p Flask,flask_restx,APScheduler,oracledb,pandas,dash,psutil
 
-pipdeptree -r -p Flask,flask_restx,APScheduler,oracledb,pandas,dash,psutil
 APScheduler==3.11.0
 Flask==3.0.3
 ├── dash==3.0.4 [requires: Flask>=1.0.4,<3.1]
@@ -127,6 +126,7 @@ psutil==7.0.0
 
 ```bash
 pipdeptree -p Flask,flask_restx,APScheduler,oracledb,pandas,dash,psutil
+
 APScheduler==3.11.0
 └── tzlocal [required: >=3.0, installed: 5.3.1]
     └── tzdata [required: Any, installed: 2025.2]
