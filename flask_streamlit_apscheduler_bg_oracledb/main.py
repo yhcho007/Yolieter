@@ -38,9 +38,10 @@ api = Api(app, version='1.0', title='Task Management API',
           description='Oracle DB에 작업을 관리하는 간단 API야!') # 설명도 좀 더 친근하게 바꿔봤어!
 
 # 데이터베이스 연결 정보 (네 정보로 꼭 바꿔줘!)
-DB_USER = 'your_username'
-DB_PASSWORD = 'your_password'
+DB_USER = 'testcho'
+DB_PASSWORD = '1234'
 DB_DSN = 'your_dsn'
+
 
 # API 모델 정의 (이것도 그대로 쓰면 돼!)
 task_model = api.model('Task', {
@@ -56,7 +57,7 @@ def get_db_connection():
     """데이터베이스 연결을 가져오는 함수"""
     logger.info("DB 연결 시도...")
     try:
-        connection = oracledb.connect(user=DB_USER, password=DB_PASSWORD, dsn=DB_DSN)
+        connection = oracledb.connect(user="testcho", password="1234", dsn="127.0.0.1:1521/FREE")
         logger.info("DB 연결 성공!")
         return connection
     except Exception as e:
