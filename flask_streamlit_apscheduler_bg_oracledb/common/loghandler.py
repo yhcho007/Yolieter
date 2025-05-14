@@ -3,7 +3,7 @@ import logging.handlers
 import os
 import datetime
 
-class LogHandler():
+class LogHandler:
     def __init__(self):
         self.log_dir = "logs"
 

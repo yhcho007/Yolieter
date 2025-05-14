@@ -5,7 +5,8 @@ from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 from common.loghandler import LogHandler
 
-logger = LogHandler.getloghandler("sch")
+log_handler = LogHandler()
+logger = log_handler.getloghandler("sch")
 
 def fetch_tasks(connection):
     query = "SELECT taskid, taskname, subprocee_starttime, task_status FROM SCH WHERE task_status != 'S'"

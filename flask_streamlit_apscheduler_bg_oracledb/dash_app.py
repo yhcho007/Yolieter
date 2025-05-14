@@ -12,7 +12,8 @@ import psutil
 import json
 from common.loghandler import LogHandler
 
-logger = LogHandler.getloghandler("dash")
+log_handler = LogHandler()
+logger = log_handler.getloghandler("dash")
 
 app = dash.Dash(__name__)
 
@@ -137,4 +138,4 @@ def update_output(n_clicks, taskid, taskname, starttime, status):
     return fig, table_data, metrics + cpu_process_df.to_string(index=False) + "\n" + memory_process_df.to_string(index=False), post_response_message
 
 if __name__ == '__main__':
-    app.run_server(debug=False)
+    app.run(debug=False)
