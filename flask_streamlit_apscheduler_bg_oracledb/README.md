@@ -127,4 +127,4 @@ curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
 python get-pip.py
 
 ### 참고한 URL
-[Oracle] Windows 10 오라클 19c 다운로드 및 설치 방법 [Windows](https://source-factory.tistory.com/m/11)
+[Oracle Windows 10 오라클 19c 다운로드 및 설치 방법 Windows](https://source-factory.tistory.com/m/11)
