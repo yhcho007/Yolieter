@@ -110,6 +110,8 @@ pip install -r requirements.txt
 ```
 패키지 의존성에 의해 추가적인 패키지 들이 설치 될 수있는데, requirements.txt 로 설치 후 pip freeze > requirements_full.txt 하여 requirements_full.txt 에서 확인 바랍니다. 
 
+패키지간 의존성 추적 [pipdeptree](https://pypi.org/project/pipdeptree/) 을 사용해서 합니다
+
 ## docker-compose up 으로 기동하기
 이 docker-compose.yml 파일이 있는 디렉토리에서 터미널을 열고 docker-compose up --build 명령어를 실행하면 이미지를 빌드하고 컨테이너를 실행할 수 있어! 
 --build는 변경사항이 있을 때 이미지를 다시 빌드하라는 뜻이야. 백그라운드로 실행하고 싶으면 -d 옵션을 추가해서 docker-compose up -d --build 라고 하면 돼.
