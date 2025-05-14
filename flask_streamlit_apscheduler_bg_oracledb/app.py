@@ -5,7 +5,8 @@ import sys
 import signal
 from common.loghandler import LogHandler
 
-logger = LogHandler.getloghandler("app")
+log_handler = LogHandler()
+logger = log_handler.getloghandler("app")
 
 # 전역 변수로 taskid와 connection 정의
 taskid = None

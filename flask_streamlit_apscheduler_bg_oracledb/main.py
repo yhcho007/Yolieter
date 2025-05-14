@@ -30,7 +30,8 @@ import signal
 import sys
 from common.loghandler import LogHandler
 
-logger = LogHandler.getloghandler("main")
+log_handler = LogHandler()
+logger = log_handler.getloghandler("main")
 
 app = Flask(__name__)
 # Api 초기화는 그대로!
