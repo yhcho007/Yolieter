@@ -127,7 +127,7 @@ curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
 python get-pip.py
 
 ### 참고한 URL 감사합니다!!!
-[oracle 23ai windows 버전설치](https://download.oracle.com/otn-pub/otn_software/db-express/WINDOWS.X64_238000_free.zip)
+[Oracle Database 23ai Free Platforms windows 버전설치](https://download.oracle.com/otn-pub/otn_software/db-express/WINDOWS.X64_238000_free.zip)
 
 [Oracle-오라클-계정-생성-삭제-테이블-스페이스-생성-삭제-계정-권한-부여](https://daftcoder.tistory.com/entry/Oracle-%EC%98%A4%EB%9D%BC%ED%81%B4-%EA%B3%84%EC%A0%95-%EC%83%9D%EC%84%B1-%EC%82%AD%EC%A0%9C-%ED%85%8C%EC%9D%B4%EB%B8%94-%EC%8A%A4%ED%8E%98%EC%9D%B4%EC%8A%A4-%EC%83%9D%EC%84%B1-%EC%82%AD%EC%A0%9C-%EA%B3%84%EC%A0%95-%EA%B6%8C%ED%95%9C-%EB%B6%80%EC%97%AC)
 
