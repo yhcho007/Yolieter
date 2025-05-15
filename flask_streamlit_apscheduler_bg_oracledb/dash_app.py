@@ -11,22 +11,26 @@ import plotly.express as px
 import psutil
 import json
 from common.loghandler import LogHandler
+from common.dbhandler import DBHandler
 
 log_handler = LogHandler()
 logger = log_handler.getloghandler("dash")
+
+db_handler = DBHandler()
+dbconn = db_handler.get_db_connection(logger)
 
 app = dash.Dash(__name__)
 
 def fetch_tasks(params):
     """Fetch tasks from the API."""
-    response = requests.get("http://localhost:5000/tasks", params=params)
+    response = requests.get("http://127.0.0.1:5000/tasks", params=params)
     if response.status_code == 200:
         return response.json()
     return []
 
 def post_task(data):
     """Post a new task to the API."""
-    response = requests.post("http://localhost:5000/tasks", json=data)
+    response = requests.post("http://127.0.0.1:5000/tasks", json=data)
     if response.status_code == 200:
         return response.json()
     return {"error": "Failed to post task"}

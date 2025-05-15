@@ -4,28 +4,31 @@ from datetime import datetime
 import sys
 import signal
 from common.loghandler import LogHandler
+from common.dbhandler import DBHandler
 
 log_handler = LogHandler()
 logger = log_handler.getloghandler("app")
 
+db_handler = DBHandler()
+dbconn = db_handler.get_db_connection(logger)
+
 # 전역 변수로 taskid와 connection 정의
 taskid = None
-connection = None
 
-def update_task_status(connection, taskid, status):
-    with connection.cursor() as cursor:
+def update_task_status(taskid, status):
+    with dbconn.cursor() as cursor:
         cursor.execute("""
-            UPDATE task 
+            UPDATE TESTCHO.TASK 
             SET task_status = :status, 
                 changed_at = CURRENT_TIMESTAMP 
             WHERE taskid = :taskid
         """, status=status, taskid=taskid)
-        connection.commit()
+        dbconn.commit()
 
 
-def fetch_data(connection, taskid):
-    query = "SELECT * FROM SCH WHERE taskid = :taskid"
-    return pd.read_sql(query, connection, params={'taskid': taskid})
+def fetch_data(taskid):
+    query = "SELECT * FROM TESTCHO.TASK WHERE taskid = :taskid"
+    return pd.read_sql(query, dbconn, params={'taskid': taskid})
 
 def save_to_csv(dataframe):
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
@@ -35,23 +38,15 @@ def save_to_csv(dataframe):
 
 def signal_handler(sig, frame):
     """신호 처리기: 프로세스가 종료될 때 상태 업데이트."""
-    global connection
-    if connection:
-        update_task_status(connection, taskid, 'K')
+    if dbconn:
+        update_task_status(dbconn, taskid, 'K')
     logger.info("Process terminated. Status updated to 'K'.")
     sys.exit(0)
 
 def main(taskid_input):
-    global taskid, connection
+    global taskid, dbconn
     taskid = taskid_input
 
-    # Oracle DB 연결 정보
-    dsn = "your_dsn"  # 데이터 소스 이름
-    user = "your_username"  # 사용자 이름
-    password = "your_password"  # 비밀번호
-
-    # 데이터베이스 연결
-    connection = oracledb.connect(user=user, password=password, dsn=dsn)
 
     # 종료 신호 처리 등록
     signal.signal(signal.SIGINT, signal_handler)  # Ctrl+C
@@ -59,18 +54,18 @@ def main(taskid_input):
 
     try:
         # 데이터 가져오기
-        data = fetch_data(connection, taskid)
+        data = fetch_data(dbconn, taskid)
 
         # CSV 파일로 저장
         save_to_csv(data)
 
         # 상태 업데이트
-        update_task_status(connection, taskid, 'S')
+        update_task_status(dbconn, taskid, 'S')
     finally:
         # 종료 시 상태 업데이트
-        if connection:
-            update_task_status(connection, taskid, 'E')
-            connection.close()
+        if dbconn:
+            update_task_status(dbconn, taskid, 'E')
+            dbconn.close()
 
 if __name__ == "__main__":
     # 커맨드라인 인자로 taskid를 가져옴
