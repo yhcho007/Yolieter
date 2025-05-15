@@ -1,9 +1,8 @@
 # 필요한 라이브러리들을 가져와요
 '''
-실행방법 : streamlit run app_dashboard.py
+실행방법 : streamlit run dash_app1.py
 접속 :
-  Local URL: http://localhost:8501
-  Network URL: http://<예하의 로컬 네트워크 IP>:8501
+  Local URL: http://127.0.0.1:8501
 
 '''
 import streamlit as st
@@ -13,25 +12,24 @@ import pandas as pd
 import time
 from datetime import datetime
 import plotly.express as px # 그래프 그리는 라이브러리
+from common.dbhandler import DBHandler
+from common.loghandler import LogHandler
 
-# Oracle DB 연결 설정 (!!! 예하의 실제 DB 정보로 수정해야 해 !!!)
-# TNS_ADMIN 환경 변수로 tnsnames.ora 파일 경로를 설정했다면 dsn에 별칭만 넣어도 돼.
-# 아니면 'hostname:port/servicename' 형태의 easy connect 문자열을 사용해줘.
-# oracledb.init_oracle_client(lib_dir="/경로/to/oracle/instantclient") # Instant Client 사용 시 필요
-db_config = {
-    'user': 'your_username',       # 예하의 DB 사용자 이름
-    'password': 'your_password',   # 예하의 DB 비밀번호
-    'dsn': 'your_dsn'              # 예: 'localhost:1521/ORCL', 'your_tns_alias'
-}
+log_handler = LogHandler()
+logger = log_handler.getloghandler("main")
+
+db_handler = DBHandler()
+dbconn = db_handler.get_db_connection(logger)
+
 
 # --- 기존 예하 코드에서 가져온 DB 관련 함수 ---
 
 # 데이터베이스에서 작업을 가져오는 함수
-def fetch_tasks(connection):
+def fetch_tasks():
     """DB에서 TASK 테이블의 작업 목록을 가져옵니다 (상태 'S' 제외)."""
     try:
         query = "SELECT taskid, taskname, subprocee_starttime, task_status FROM TESTCHO.TASK WHERE task_status != 'S'"
-        df = pd.read_sql(query, connection)
+        df = pd.read_sql(query, dbconn)
         df.columns = map(str.lower, df.columns) # 컬럼 이름을 소문자로 통일
         return df
     except Exception as e:
@@ -211,8 +209,7 @@ while True:
 
         # --- 작업 현황 표시 (DB에서 가져옴) ---
         try:
-            with oracledb.connect(**db_config) as connection:
-                tasks_df = fetch_tasks(connection)
+            tasks_df = fetch_tasks()
 
             if not tasks_df.empty:
                 st.write("데이터베이스에서 가져온 작업 목록:") # 이 텍스트는 기본 흰색
