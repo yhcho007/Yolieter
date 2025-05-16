@@ -84,15 +84,11 @@ class TaskResource(Resource):
             return make_response(jsonify({"message": "작업이 성공적으로 등록되었어!"}), 201)
         except oracledb.Error as e:
             logger.info(f"데이터베이스 오류: {e}")
-            if dbconn:
-                dbconn.rollback() # 오류 발생 시 롤백
             return make_response(jsonify({"message": f"데이터베이스 작업 중 오류가 발생했어: {e}"}), 500)
         except Exception as e:
              logger.info(f"예상치 못한 오류 발생: {e}")
              return make_response(jsonify({"message": f"작업 등록 중 예상치 못한 오류가 발생했어: {e}"}), 500)
-        finally:
-            if dbconn:
-                 dbconn.close() # 연결 닫기
+
 
 
     @api.response(200, '성공!')
@@ -173,9 +169,6 @@ class TaskResource(Resource):
         except Exception as e:
              logger.info(f"예상치 못한 오류 발생: {e}")
              return make_response(jsonify({"message": f"작업 조회 중 예상치 못한 오류가 발생했어: {e}"}), 500)
-        finally:
-            if dbconn:
-                 dbconn.close() # 연결 닫기
 
 # sch.py를 백그라운드로 실행하는 함수
 def run_sch_background():

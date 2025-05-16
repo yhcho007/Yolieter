@@ -6,7 +6,7 @@ class DBHandler:
         self.db_config = {
             'user': 'testcho',
             'password': '1234',
-            'dsn': 'dsn="127.0.0.1:1521/FREE"'
+            'dsn': '127.0.0.1:1521/FREE'
         }
     def get_db_config(self):
         return self.db_config
