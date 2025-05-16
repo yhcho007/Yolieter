@@ -21,17 +21,21 @@ curl -X GET "http://localhost:5000/tasks"
 curl -X GET "http://localhost:5000/tasks?starttime=20250510010101&endtime=20250510110101"
 
 '''
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response
 from flask_restx import Api, Resource, fields # <-- 여기를 flask_restx로 바꿨어!
-import oracledb
 import pandas as pd
 import subprocess
 import signal
 import sys
+import oracledb
+from common.dbhandler import DBHandler
 from common.loghandler import LogHandler
 
 log_handler = LogHandler()
 logger = log_handler.getloghandler("main")
+
+db_handler = DBHandler()
+dbconn = db_handler.get_db_connection(logger)
 
 app = Flask(__name__)
 # Api 초기화는 그대로!
@@ -54,13 +58,13 @@ task_model = api.model('Task', {
 # 백그라운드 프로세스 객체를 저장할 변수
 background_process = None
 
-def get_db_connection():
+def get_db_dbconn():
     """데이터베이스 연결을 가져오는 함수"""
     logger.info("DB 연결 시도...")
     try:
-        connection = oracledb.connect(user="testcho", password="1234", dsn="127.0.0.1:1521/FREE")
+        dbconn = oracledb.connect(user="testcho", password="1234", dsn="127.0.0.1:1521/FREE")
         logger.info("DB 연결 성공!")
-        return connection
+        return dbconn
     except Exception as e:
         logger.info(f"DB 연결 오류: {e}")
         return None
@@ -76,38 +80,36 @@ class TaskResource(Resource):
         """새 작업을 등록하는 API"""
         data = request.json
         if not data:
-             return {"message": "요청 본문이 비어있거나 JSON 형식이 아니야."}, 400
+             return make_response(jsonify({"message": "요청 본문이 비어있거나 JSON 형식이 아니야."}), 400)
 
         # 필수 필드 확인
         if not all(k in data for k in ('taskname', 'subprocee_starttime', 'task_status')):
-             return {"message": "필수 정보(taskname, subprocee_starttime, task_status)가 부족해."}, 400
+             return make_response(jsonify({"message": "필수 정보(taskname, subprocee_starttime, task_status)가 부족해."}), 400)
 
-        connection = None
         try:
-            connection = get_db_connection()
-            if connection is None:
-                 return {"message": "데이터베이스 연결에 실패했어."}, 500
+            if dbconn is None:
+                 return make_response(jsonify({"message": "데이터베이스 연결에 실패했어."}), 500)
 
-            with connection.cursor() as cursor:
+            with dbconn.cursor() as cursor:
                 cursor.execute(
-                    "INSERT INTO SCH (taskname, subprocee_starttime, task_status) VALUES (:taskname, TO_DATE(:subprocee_starttime, 'YYYY-MM-DD HH24:MI:SS'), :task_status)",
+                    "INSERT INTO TESTCHO.TASK (taskname, subprocee_starttime, task_status) VALUES (:taskname, TO_DATE(:subprocee_starttime, 'YYYY-MM-DD HH24:MI:SS'), :task_status)",
                     taskname=data['taskname'],
                     subprocee_starttime=data['subprocee_starttime'],
                     task_status=data['task_status']
                 )
-                connection.commit()
-            return jsonify({"message": "작업이 성공적으로 등록되었어!"}), 201
+                dbconn.commit()
+            return make_response(jsonify({"message": "작업이 성공적으로 등록되었어!"}), 201)
         except oracledb.Error as e:
             logger.info(f"데이터베이스 오류: {e}")
-            if connection:
-                connection.rollback() # 오류 발생 시 롤백
-            return jsonify({"message": f"데이터베이스 작업 중 오류가 발생했어: {e}"}), 500
+            if dbconn:
+                dbconn.rollback() # 오류 발생 시 롤백
+            return make_response(jsonify({"message": f"데이터베이스 작업 중 오류가 발생했어: {e}"}), 500)
         except Exception as e:
              logger.info(f"예상치 못한 오류 발생: {e}")
-             return jsonify({"message": f"작업 등록 중 예상치 못한 오류가 발생했어: {e}"}), 500
+             return make_response(jsonify({"message": f"작업 등록 중 예상치 못한 오류가 발생했어: {e}"}), 500)
         finally:
-            if connection:
-                 connection.close() # 연결 닫기
+            if dbconn:
+                 dbconn.close() # 연결 닫기
 
 
     @api.response(200, '성공!')
@@ -127,7 +129,7 @@ class TaskResource(Resource):
         endtime = request.args.get('endtime')      # YYYYMMDDHHMISS 형식
         limit_str = request.args.get('limit', default='all') # 문자열로 받아서 처리
 
-        query = "SELECT taskid, taskname, subprocee_starttime, task_status FROM SCH WHERE 1=1"
+        query = "SELECT taskid, taskname, subprocee_starttime, task_status FROM TESTCHO.TASK WHERE 1=1"
         params = {}
 
         if taskid:
@@ -145,7 +147,7 @@ class TaskResource(Resource):
                 params['starttime'] = starttime_formatted
             else:
                 # 시간 형식 오류 처리
-                return jsonify({"message": "starttime 형식이 YYYYMMDDHHMISS 여야 해!"}), 400
+                return make_response(jsonify({"message": "starttime 형식이 YYYYMMDDHHMISS 여야 해!"}), 400)
 
         if endtime:
              # 입력 형식 확인 (최소한 길이)
@@ -155,7 +157,7 @@ class TaskResource(Resource):
                 params['endtime'] = endtime_formatted
              else:
                 # 시간 형식 오류 처리
-                return jsonify({"message": "endtime 형식이 YYYYMMDDHHMISS 여야 해!"}), 400
+                return make_response(jsonify({"message": "endtime 형식이 YYYYMMDDHHMISS 여야 해!"}), 400)
 
         if limit_str != 'all':
             try:
@@ -164,35 +166,35 @@ class TaskResource(Resource):
                 query += " ORDER BY taskid ASC"
                 params['limit'] = limit
             except ValueError:
-                 return jsonify({"message": "limit은 'all' 이거나 숫자로 입력해야 해!"}), 400
+                 return make_response(jsonify({"message": "limit은 'all' 이거나 숫자로 입력해야 해!"}), 400)
 
 
-        connection = None
+        dbconn = None
         try:
-            connection = get_db_connection()
-            if connection is None:
-                 return {"message": "데이터베이스 연결에 실패했어."}, 500
+            dbconn = get_db_dbconn()
+            if dbconn is None:
+                 return make_response(jsonify({"message": "데이터베이스 연결에 실패했어."}), 500)
 
             # pandas.read_sql은 oracledb 커넥션 객체를 직접 받을 수 있어.
-            tasks = pd.read_sql(query, connection, params=params)
+            tasks = pd.read_sql(query, dbconn, params=params)
 
             if tasks.empty:
                 # 200 OK with empty list vs 404 Not Found 중 어떤 것이 좋을지는 API 설계에 따라 달라.
                 # 예시 코드에선 404를 반환했으니 그대로 404로 갈게!
-                return jsonify({"message": "조건에 맞는 작업을 찾지 못했어."}), 404
+                return make_response(jsonify({"message": "조건에 맞는 작업을 찾지 못했어."}), 404)
 
             tasks['SUBPROCEE_STARTTIME'] = tasks['SUBPROCEE_STARTTIME'].dt.strftime('%Y-%m-%d %H:%M:%S')
 
-            return jsonify(tasks.to_dict(orient='records')), 200
+            return make_response(jsonify(tasks.to_dict(orient='records')), 200)
         except oracledb.Error as e:
             logger.info(f"데이터베이스 오류: {e}")
-            return jsonify({"message": f"데이터베이스 작업 중 오류가 발생했어: {e}"}), 500
+            return make_response(jsonify({"message": f"데이터베이스 작업 중 오류가 발생했어: {e}"}), 500)
         except Exception as e:
              logger.info(f"예상치 못한 오류 발생: {e}")
-             return jsonify({"message": f"작업 조회 중 예상치 못한 오류가 발생했어: {e}"}), 500
+             return make_response(jsonify({"message": f"작업 조회 중 예상치 못한 오류가 발생했어: {e}"}), 500)
         finally:
-            if connection:
-                 connection.close() # 연결 닫기
+            if dbconn:
+                 dbconn.close() # 연결 닫기
 
 # sch.py를 백그라운드로 실행하는 함수
 def run_sch_background():
@@ -202,7 +204,7 @@ def run_sch_background():
         # stdout, stderr을 파이프로 연결해서 나중에 읽거나, 파일로 리다이렉트할 수 있어.
         # 여기선 간단히 DEVNULL로 버리도록 했어.
         process = subprocess.Popen(
-            [sys.executable, "sch.py"], # sys.executable을 사용하면 현재 파이썬 환경으로 실행돼서 좋아!
+            ["python", "sch.py"], # sys.executable을 사용하면 현재 파이썬 환경으로 실행돼서 좋아!
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             shell=False # shell=False가 더 안전한 방법이야
