@@ -16,6 +16,7 @@ dbconn = db_handler.get_db_connection(logger)
 taskid = None
 
 def update_task_status(taskid, status):
+    global dbconn
     with dbconn.cursor() as cursor:
         cursor.execute("""
             UPDATE TESTCHO.TASK 
@@ -27,6 +28,7 @@ def update_task_status(taskid, status):
 
 
 def fetch_data(taskid):
+    global dbconn
     query = "SELECT * FROM TESTCHO.TASK WHERE taskid = :taskid"
     return pd.read_sql(query, dbconn, params={'taskid': taskid})
 
@@ -38,6 +40,7 @@ def save_to_csv(dataframe):
 
 def signal_handler(sig, frame):
     """신호 처리기: 프로세스가 종료될 때 상태 업데이트."""
+    global dbconn
     if dbconn:
         update_task_status(dbconn, taskid, 'K')
     logger.info("Process terminated. Status updated to 'K'.")

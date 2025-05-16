@@ -14,17 +14,18 @@ logger = log_handler.getloghandler("main")
 
 db_handler = DBHandler()
 db_config = db_handler.get_db_config()
-
+dbconn = db_handler.get_db_connection(logger)
 db_url = f"oracle+oracledb://{db_config['user']}:{db_config['password']}@{db_config['dsn']}"
+print('db_url:{:db_url}')
 engine = create_engine(db_url)
 
 def fetch_tasks_sqlalchemy():
+    global engine, dbconn
     try:
         query = "SELECT taskid, taskname, subprocee_starttime, task_status FROM TESTCHO.TASK WHERE task_status != 'S'"
-        with engine.connect() as connection:
-            df = pd.read_sql(query, connection)
-            df.columns = map(str.lower, df.columns)
-            return df
+        df = pd.read_sql(query, dbconn)
+        df.columns = map(str.lower, df.columns)
+        return df
     except Exception as e:
         st.error(f"작업 목록 가져오기 중 에러 발생: {e}")
         return pd.DataFrame()
