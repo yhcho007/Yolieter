@@ -92,14 +92,16 @@ Python 3.12.3
 
 ### requirements.txt
 ```bash
-Flask==3.0.3
-flask_restx==1.3.0
-APScheduler==3.11.0
-oracledb==3.1.0
+oracledb==3.1.1
+streamlit==1.45.1
+plotly==6.1.0
 pandas==2.2.3
-dash==3.0.4
-plotly==6.1.0rc0
 psutil==7.0.0
+scheduler==0.8.8
+SQLAlchemy==2.0.41
+Flask==3.1.1
+flask-restx==1.3.0
+pipdeptree==2.26.1
 #gunicorn==22.0.0
 #supervisor==6.3.0
 ```
@@ -108,55 +110,32 @@ psutil==7.0.0
 ```bash
 pip install -r requirements.txt
 ```
-패키지 의존성에 의해 추가적인 패키지 들이 설치 될 수있는데, requirements.txt 로 설치 후 pip freeze > requirements_full.txt 하여 requirements_full.txt 에서 확인 바랍니다. 
-
-패키지간 의존성 추적 [pipdeptree](https://pypi.org/project/pipdeptree/) 을 사용해서 합니다. 설치된 패키지간 의존성은 다음과 충돌이나 싸이클 없음을 알 수 있다.
+패쇠망에서는 패키지의 모든 wheel 파일이 있어야 패키지 설치가 가능하므로, 패쇄망 내에서 python 모든 패키지와 의존성 있는 모든 패키지 설치를 위해, 의존성이 있는 모든 wheel 파일을 다운 받기위해서는 다음과 같이 합니다.
 ```bash
-pipdeptree -r -p Flask,flask_restx,APScheduler,oracledb,pandas,dash,psutil
-
-APScheduler==3.11.0
-Flask==3.0.3
-├── dash==3.0.4 [requires: Flask>=1.0.4,<3.1]
-└── flask-restx==1.3.0 [requires: Flask>=0.8,!=2.0.0]
-oracledb==3.1.0
-pandas==2.2.3
-psutil==7.0.0
+pip download -r requirements.txt --no-binary :all --no-cache-dir --dest <다운로드 경로>
 ```
-이 패키지들과 의존성이 있는 전체 패키지는 다음과 같다.
+
+패키지 의존성에 의해 추가적인 패키지 들이 설치 될 수있는데, requirements.txt 로 설치 후, pipdeptree 패키지를 사용해서,
+패키지간 의존성 [pipdeptree](https://pypi.org/project/pipdeptree/) 을 확인 합니다. 
+requirements.txt 내에 기술된 패키지간 의존성은 다음과 충돌이나 싸이클 없음을 알 수 있다.
+```bash
+pipdeptree -r -p oracledb,plotly,streamlit,pandas,psutil,scheduler,SQLAlchemy,Flask,flask-restx
+
+Flask==3.1.1
+└── flask-restx==1.3.0 [requires: Flask>=0.8,!=2.0.0]
+oracledb==3.1.1
+pandas==2.2.3
+└── streamlit==1.45.1 [requires: pandas>=1.4.0,<3]
+plotly==6.1.0
+psutil==7.0.0
+scheduler==0.8.8
+SQLAlchemy==2.0.41
+```
+설치한 모든 python 패키지들과 의존성이 있는 패키지는 다음과 같이 확인 합니다.
 
 ```bash
-pipdeptree -p Flask,flask_restx,APScheduler,oracledb,pandas,dash,psutil
+pipdeptree -p oracledb,plotly,streamlit,pandas,psutil,scheduler,SQLAlchemy,Flask,flask-restx
 
-APScheduler==3.11.0
-└── tzlocal [required: >=3.0, installed: 5.3.1]
-    └── tzdata [required: Any, installed: 2025.2]
-dash==3.0.4
-├── Flask [required: >=1.0.4,<3.1, installed: 3.0.3]
-│   ├── Werkzeug [required: >=3.0.0, installed: 3.0.6]
-│   │   └── MarkupSafe [required: >=2.1.1, installed: 3.0.2]
-│   ├── Jinja2 [required: >=3.1.2, installed: 3.1.6]
-│   │   └── MarkupSafe [required: >=2.0, installed: 3.0.2]
-│   ├── itsdangerous [required: >=2.1.2, installed: 2.2.0]
-│   ├── click [required: >=8.1.3, installed: 8.2.0]
-│   │   └── colorama [required: Any, installed: 0.4.6]
-│   └── blinker [required: >=1.6.2, installed: 1.9.0]
-├── Werkzeug [required: <3.1, installed: 3.0.6]
-│   └── MarkupSafe [required: >=2.1.1, installed: 3.0.2]
-├── plotly [required: >=5.0.0, installed: 6.0.1]
-│   ├── narwhals [required: >=1.15.1, installed: 1.39.0]
-│   └── packaging [required: Any, installed: 25.0]
-├── importlib_metadata [required: Any, installed: 8.7.0]
-│   └── zipp [required: >=3.20, installed: 3.21.0]
-├── typing_extensions [required: >=4.1.1, installed: 4.13.2]
-├── requests [required: Any, installed: 2.32.3]
-│   ├── charset-normalizer [required: >=2,<4, installed: 3.4.2]
-│   ├── idna [required: >=2.5,<4, installed: 3.10]
-│   ├── urllib3 [required: >=1.21.1,<3, installed: 2.4.0]
-│   └── certifi [required: >=2017.4.17, installed: 2025.4.26]
-├── retrying [required: Any, installed: 1.3.4]
-│   └── six [required: >=1.7.0, installed: 1.17.0]
-├── nest-asyncio [required: Any, installed: 1.6.0]
-└── setuptools [required: Any, installed: 80.4.0]
 flask-restx==1.3.0
 ├── aniso8601 [required: >=0.82, installed: 10.0.1]
 ├── jsonschema [required: Any, installed: 4.23.0]
@@ -164,39 +143,95 @@ flask-restx==1.3.0
 │   ├── jsonschema-specifications [required: >=2023.03.6, installed: 2025.4.1]
 │   │   └── referencing [required: >=0.31.0, installed: 0.36.2]
 │   │       ├── attrs [required: >=22.2.0, installed: 25.3.0]
-│   │       ├── rpds-py [required: >=0.7.0, installed: 0.24.0]
+│   │       ├── rpds-py [required: >=0.7.0, installed: 0.25.0]
 │   │       └── typing_extensions [required: >=4.4.0, installed: 4.13.2]
 │   ├── referencing [required: >=0.28.4, installed: 0.36.2]
 │   │   ├── attrs [required: >=22.2.0, installed: 25.3.0]
-│   │   ├── rpds-py [required: >=0.7.0, installed: 0.24.0]
+│   │   ├── rpds-py [required: >=0.7.0, installed: 0.25.0]
 │   │   └── typing_extensions [required: >=4.4.0, installed: 4.13.2]
-│   └── rpds-py [required: >=0.7.1, installed: 0.24.0]
-├── Flask [required: >=0.8,!=2.0.0, installed: 3.0.3]
-│   ├── Werkzeug [required: >=3.0.0, installed: 3.0.6]
-│   │   └── MarkupSafe [required: >=2.1.1, installed: 3.0.2]
-│   ├── Jinja2 [required: >=3.1.2, installed: 3.1.6]
-│   │   └── MarkupSafe [required: >=2.0, installed: 3.0.2]
-│   ├── itsdangerous [required: >=2.1.2, installed: 2.2.0]
+│   └── rpds-py [required: >=0.7.1, installed: 0.25.0]
+├── Flask [required: >=0.8,!=2.0.0, installed: 3.1.1]
+│   ├── blinker [required: >=1.9.0, installed: 1.9.0]
 │   ├── click [required: >=8.1.3, installed: 8.2.0]
 │   │   └── colorama [required: Any, installed: 0.4.6]
-│   └── blinker [required: >=1.6.2, installed: 1.9.0]
-├── Werkzeug [required: !=2.0.0, installed: 3.0.6]
+│   ├── itsdangerous [required: >=2.2.0, installed: 2.2.0]
+│   ├── Jinja2 [required: >=3.1.2, installed: 3.1.6]
+│   │   └── MarkupSafe [required: >=2.0, installed: 3.0.2]
+│   ├── MarkupSafe [required: >=2.1.1, installed: 3.0.2]
+│   └── Werkzeug [required: >=3.1.0, installed: 3.1.3]
+│       └── MarkupSafe [required: >=2.1.1, installed: 3.0.2]
+├── Werkzeug [required: !=2.0.0, installed: 3.1.3]
 │   └── MarkupSafe [required: >=2.1.1, installed: 3.0.2]
 ├── pytz [required: Any, installed: 2025.2]
 └── importlib_resources [required: Any, installed: 6.5.2]
-oracledb==3.1.0
+oracledb==3.1.1
 └── cryptography [required: >=3.2.1, installed: 44.0.3]
     └── cffi [required: >=1.12, installed: 1.17.1]
         └── pycparser [required: Any, installed: 2.22]
-pandas==2.2.3
-├── numpy [required: >=1.26.0, installed: 2.2.5]
-├── python-dateutil [required: >=2.8.2, installed: 2.9.0.post0]
-│   └── six [required: >=1.5, installed: 1.17.0]
-├── pytz [required: >=2020.1, installed: 2025.2]
-└── tzdata [required: >=2022.7, installed: 2025.2]
+plotly==6.1.0
+├── narwhals [required: >=1.15.1, installed: 1.39.1]
+└── packaging [required: Any, installed: 24.2]
 psutil==7.0.0
+scheduler==0.8.8
+└── typeguard [required: >=3.0.0, installed: 4.4.2]
+    └── typing_extensions [required: >=4.10.0, installed: 4.13.2]
+SQLAlchemy==2.0.41
+├── greenlet [required: >=1, installed: 3.2.2]
+└── typing_extensions [required: >=4.6.0, installed: 4.13.2]
+streamlit==1.45.1
+├── altair [required: >=4.0,<6, installed: 5.5.0]
+│   ├── Jinja2 [required: Any, installed: 3.1.6]
+│   │   └── MarkupSafe [required: >=2.0, installed: 3.0.2]
+│   ├── jsonschema [required: >=3.0, installed: 4.23.0]
+│   │   ├── attrs [required: >=22.2.0, installed: 25.3.0]
+│   │   ├── jsonschema-specifications [required: >=2023.03.6, installed: 2025.4.1]
+│   │   │   └── referencing [required: >=0.31.0, installed: 0.36.2]
+│   │   │       ├── attrs [required: >=22.2.0, installed: 25.3.0]
+│   │   │       ├── rpds-py [required: >=0.7.0, installed: 0.25.0]
+│   │   │       └── typing_extensions [required: >=4.4.0, installed: 4.13.2]
+│   │   ├── referencing [required: >=0.28.4, installed: 0.36.2]
+│   │   │   ├── attrs [required: >=22.2.0, installed: 25.3.0]
+│   │   │   ├── rpds-py [required: >=0.7.0, installed: 0.25.0]
+│   │   │   └── typing_extensions [required: >=4.4.0, installed: 4.13.2]
+│   │   └── rpds-py [required: >=0.7.1, installed: 0.25.0]
+│   ├── narwhals [required: >=1.14.2, installed: 1.39.1]
+│   ├── packaging [required: Any, installed: 24.2]
+│   └── typing_extensions [required: >=4.10.0, installed: 4.13.2]
+├── blinker [required: >=1.5.0,<2, installed: 1.9.0]
+├── cachetools [required: >=4.0,<6, installed: 5.5.2]
+├── click [required: >=7.0,<9, installed: 8.2.0]
+│   └── colorama [required: Any, installed: 0.4.6]
+├── numpy [required: >=1.23,<3, installed: 2.2.5]
+├── packaging [required: >=20,<25, installed: 24.2]
+├── pandas [required: >=1.4.0,<3, installed: 2.2.3]
+│   ├── numpy [required: >=1.26.0, installed: 2.2.5]
+│   ├── python-dateutil [required: >=2.8.2, installed: 2.9.0.post0]
+│   │   └── six [required: >=1.5, installed: 1.17.0]
+│   ├── pytz [required: >=2020.1, installed: 2025.2]
+│   └── tzdata [required: >=2022.7, installed: 2025.2]
+├── pillow [required: >=7.1.0,<12, installed: 11.2.1]
+├── protobuf [required: >=3.20,<7, installed: 6.31.0]
+├── pyarrow [required: >=7.0, installed: 20.0.0]
+├── requests [required: >=2.27,<3, installed: 2.32.3]
+│   ├── charset-normalizer [required: >=2,<4, installed: 3.4.2]
+│   ├── idna [required: >=2.5,<4, installed: 3.10]
+│   ├── urllib3 [required: >=1.21.1,<3, installed: 2.4.0]
+│   └── certifi [required: >=2017.4.17, installed: 2025.4.26]
+├── tenacity [required: >=8.1.0,<10, installed: 9.1.2]
+├── toml [required: >=0.10.1,<2, installed: 0.10.2]
+├── typing_extensions [required: >=4.4.0,<5, installed: 4.13.2]
+├── watchdog [required: >=2.1.5,<7, installed: 6.0.0]
+├── GitPython [required: >=3.0.7,<4,!=3.1.19, installed: 3.1.44]
+│   └── gitdb [required: >=4.0.1,<5, installed: 4.0.12]
+│       └── smmap [required: >=3.0.1,<6, installed: 5.0.2]
+├── pydeck [required: >=0.8.0b4,<1, installed: 0.9.1]
+│   ├── Jinja2 [required: >=2.10.1, installed: 3.1.6]
+│   │   └── MarkupSafe [required: >=2.0, installed: 3.0.2]
+│   └── numpy [required: >=1.16.4, installed: 2.2.5]
+└── tornado [required: >=6.0.3,<7, installed: 6.5]
 
 ```
+
 
 ## docker-compose up 으로 기동하기
 이 docker-compose.yml 파일이 있는 디렉토리에서 터미널을 열고 docker-compose up --build 명령어를 실행하면 이미지를 빌드하고 컨테이너를 실행할 수 있어! 
