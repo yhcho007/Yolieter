@@ -104,6 +104,7 @@ altair==5.5.0
 streamlit-autorefresh==1.0.1
 gunicorn==22.0.0
 supervisor==4.2.5
+mattermostdriver==7.3.2
 ```
 이 내용을 requirements.txt 파일로 저장하면, 필요한 패키지를 쉽게 설치할 수 있습니다. 설치하려면 다음 명령어를 사용할 수 있습니다
 
@@ -119,7 +120,7 @@ pip download -r requirements.txt --no-binary :all --no-cache-dir --dest <다운�
 
 패키지간 의존성 추적 [pipdeptree](https://pypi.org/project/pipdeptree/) 을 사용해서 합니다. 설치된 패키지간 의존성은 다음과 충돌이나 싸이클 없음을 알 수 있다.
 ```bash
-pipdeptree -r -p Flask,flask_restx,APScheduler,oracledb,pandas,dash,psutil,schedule,streamlit,streamlit_autorefresh,altair,gunicorn,supervisor
+pipdeptree -r -p Flask,flask_restx,APScheduler,oracledb,pandas,dash,psutil,schedule,streamlit,streamlit_autorefresh,altair,gunicorn,supervisor,mattermostdriver
 
 altair==5.5.0
 └── streamlit==1.45.1 [requires: altair>=4.0,<6]
@@ -129,6 +130,7 @@ Flask==3.0.3
 ├── dash==3.0.4 [requires: Flask>=1.0.4,<3.1]
 └── flask-restx==1.3.0 [requires: Flask>=0.8,!=2.0.0]
 gunicorn==23.0.0
+mattermostdriver==7.3.2
 oracledb==3.1.0
 pandas==2.2.3
 └── streamlit==1.45.1 [requires: pandas>=1.4.0,<3]
@@ -141,7 +143,7 @@ supervisor==4.2.5
 이 패키지들과 의존성이 있는 전체 패키지는 다음과 같다.
 
 ```bash
-pipdeptree -p Flask,flask_restx,APScheduler,oracledb,pandas,dash,psutil,schedule,streamlit,streamlit_autorefresh,altair,gunicorn,supervisor
+pipdeptree -p Flask,flask_restx,APScheduler,oracledb,pandas,dash,psutil,schedule,streamlit,streamlit_autorefresh,altair,gunicorn,supervisor,mattermostdriver
 
 APScheduler==4.0.0a6
 ├── anyio [required: ~=4.0, installed: 4.9.0]
@@ -208,6 +210,13 @@ flask-restx==1.3.0
 └── importlib_resources [required: Any, installed: 6.5.2]
 gunicorn==23.0.0
 └── packaging [required: Any, installed: 24.2]
+mattermostdriver==7.3.2
+├── websockets [required: >=8, installed: 15.0.1]
+└── requests [required: >=2.25, installed: 2.32.3]
+    ├── charset-normalizer [required: >=2,<4, installed: 3.4.2]
+    ├── idna [required: >=2.5,<4, installed: 3.10]
+    ├── urllib3 [required: >=1.21.1,<3, installed: 2.4.0]
+    └── certifi [required: >=2017.4.17, installed: 2025.4.26]
 oracledb==3.1.0
 └── cryptography [required: >=3.2.1, installed: 45.0.2]
     └── cffi [required: >=1.14, installed: 1.17.1]
