@@ -110,6 +110,11 @@ pip install -r requirements.txt
 ```
 패키지 의존성에 의해 추가적인 패키지 들이 설치 될 수있는데, requirements.txt 로 설치 후 pip freeze > requirements_full.txt 하여 requirements_full.txt 에서 확인 바랍니다. 
 
+패쇠망에서는 패키지의 모든 wheel 파일이 있어야 패키지 설치가 가능하므로, 패쇄망 내에서 python 모든 패키지와 의존성 있는 모든 패키지 설치를 위해, 의존성이 있는 모든 wheel 파일을 다운 받기위해서는 다음과 같이 합니다.
+```bash
+pip download -r requirements.txt --no-binary :all --no-cache-dir --dest <다운로드 경로>
+```
+
 패키지간 의존성 추적 [pipdeptree](https://pypi.org/project/pipdeptree/) 을 사용해서 합니다. 설치된 패키지간 의존성은 다음과 충돌이나 싸이클 없음을 알 수 있다.
 ```bash
 pipdeptree -r -p Flask,flask_restx,APScheduler,oracledb,pandas,dash,psutil,schedule,streamlit,streamlit_autorefresh,altair
