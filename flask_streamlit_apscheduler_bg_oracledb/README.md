@@ -94,14 +94,16 @@ Python 3.12.3
 ```bash
 Flask==3.0.3
 flask_restx==1.3.0
-APScheduler==3.11.0
+APScheduler==4.0.0a6
 oracledb==3.1.0
 pandas==2.2.3
 dash==3.0.4
-plotly==6.1.0rc0
 psutil==7.0.0
-#gunicorn==22.0.0
-#supervisor==6.3.0
+schedule==1.2.2
+altair==5.5.0
+streamlit-autorefresh==1.0.1
+gunicorn==22.0.0
+supervisor==4.2.5
 ```
 이 내용을 requirements.txt 파일로 저장하면, 필요한 패키지를 쉽게 설치할 수 있습니다. 설치하려면 다음 명령어를 사용할 수 있습니다
 
@@ -117,7 +119,7 @@ pip download -r requirements.txt --no-binary :all --no-cache-dir --dest <다운�
 
 패키지간 의존성 추적 [pipdeptree](https://pypi.org/project/pipdeptree/) 을 사용해서 합니다. 설치된 패키지간 의존성은 다음과 충돌이나 싸이클 없음을 알 수 있다.
 ```bash
-pipdeptree -r -p Flask,flask_restx,APScheduler,oracledb,pandas,dash,psutil,schedule,streamlit,streamlit_autorefresh,altair
+pipdeptree -r -p Flask,flask_restx,APScheduler,oracledb,pandas,dash,psutil,schedule,streamlit,streamlit_autorefresh,altair,gunicorn,supervisor
 
 altair==5.5.0
 └── streamlit==1.45.1 [requires: altair>=4.0,<6]
@@ -126,18 +128,20 @@ APScheduler==4.0.0a6
 Flask==3.0.3
 ├── dash==3.0.4 [requires: Flask>=1.0.4,<3.1]
 └── flask-restx==1.3.0 [requires: Flask>=0.8,!=2.0.0]
+gunicorn==23.0.0
 oracledb==3.1.0
 pandas==2.2.3
 └── streamlit==1.45.1 [requires: pandas>=1.4.0,<3]
     └── streamlit-autorefresh==1.0.1 [requires: streamlit>=0.75]
 psutil==7.0.0
 schedule==1.2.2
+supervisor==4.2.5
 
 ```
 이 패키지들과 의존성이 있는 전체 패키지는 다음과 같다.
 
 ```bash
-pipdeptree -p Flask,flask_restx,APScheduler,oracledb,pandas,dash,psutil,schedule,streamlit,streamlit_autorefresh,altair
+pipdeptree -p Flask,flask_restx,APScheduler,oracledb,pandas,dash,psutil,schedule,streamlit,streamlit_autorefresh,altair,gunicorn,supervisor
 
 APScheduler==4.0.0a6
 ├── anyio [required: ~=4.0, installed: 4.9.0]
@@ -202,6 +206,8 @@ flask-restx==1.3.0
 │   └── MarkupSafe [required: >=2.1.1, installed: 3.0.2]
 ├── pytz [required: Any, installed: 2025.2]
 └── importlib_resources [required: Any, installed: 6.5.2]
+gunicorn==23.0.0
+└── packaging [required: Any, installed: 24.2]
 oracledb==3.1.0
 └── cryptography [required: >=3.2.1, installed: 45.0.2]
     └── cffi [required: >=1.14, installed: 1.17.1]
@@ -260,7 +266,8 @@ streamlit-autorefresh==1.0.1
     │   │   └── MarkupSafe [required: >=2.0, installed: 3.0.2]
     │   └── numpy [required: >=1.16.4, installed: 2.2.6]
     └── tornado [required: >=6.0.3,<7, installed: 6.5]
-
+supervisor==4.2.5
+└── setuptools [required: Any, installed: 80.7.1]
 
 ```
 
