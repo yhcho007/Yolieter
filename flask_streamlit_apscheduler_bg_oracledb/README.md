@@ -229,6 +229,7 @@ ModuleNotFoundError: No module named 'pip._internal'
 
 위와 같은 에러가 발생하여, 다음과 같이 처리하고 패키지 삭제 후 다시 설치함.
 curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+
 python get-pip.py
 
 ### 참고한 URL 감사합니다!!!
