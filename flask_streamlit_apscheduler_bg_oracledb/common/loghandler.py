@@ -7,7 +7,6 @@ class LogHandler:
     def __init__(self):
         self.log_dir = "logs"
 
-
     # main 모듈 loghandler
     def getloghandler(self, log_name):
         # 로그 파일 이름 (날짜별로 생성)
@@ -40,7 +39,7 @@ class LogHandler:
         logger.addHandler(file_handler)
 
         # 로그 메시지 출력
-        logger.info("테스트 로그 메시지")
+        #logger.info("테스트 로그 메시지")
 
         return logger
 

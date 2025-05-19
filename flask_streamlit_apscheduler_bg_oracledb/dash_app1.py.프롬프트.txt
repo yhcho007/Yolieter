@@ -1,0 +1,26 @@
+너는 python 전문가야. 화면 전체 폭에 딱 맞게 streamlit, oracledb 를 사용해서 데쉬보드 웹페이지를 만들어줘. 
+브라우저 탭에 "스케줄데쉬보드" 로 표시해주고,, 
+"시간대별 스케줄 현황" 첯번째 쿼리 
+"SELECT HOURLY, TASK_STATUS, count(TASK_STATUS) as cnt_status from (SELECT TO_CHAR(subprocee_starttime,'YYYY-MM-DD HH24:MI') AS hourly, taskname, task_status FROM task )GROUP BY HOURLY,TASK_STATUS"
+를 이전 12시간 이후 12시간으로 읽어서, 결과로 x축 HOURLY, 세로축 cnt_status 를 TASK_STATUS 별로 꺽은선 그래프를 표시하고, 
+그아래에는 "스케줄 등록 현황" 두번째 쿼리
+"SELECT taskid, subprocee_starttime, taskname, task_status FROM task" 를 표로 표시하고 결과 row 가 10건이 넘어가면 세로 스크롤을 만들어주고,
+그아래에는 CPU 사용률,메모리 사용률,디스크 사용률,네트워크 Input (KB),네트워크 Output (KB) 을
+한 행에, 예를들어 CPU 사용률	7.0%	메모리 사용률	92.4%	디스크 사용률	72.6%	네트워크 Input (KB)	654735.09 KB	네트워크 Output (KB)	606254.14 KB 이렇게 표시해줘.
+그 아래에 총 메모리,사용 중,사용 가능 메모리도, 예를들어  총 메모리: 7.99 GB, 사용 중: 7.38 GB, 사용 가능: 0.61 GB 이렇게 만들어줘.
+그 아래에는 CPU 사용률 상위 프로세스 (Top 5), Memory 사용률 상위 프로세스 (Top 5) 세로로 화면을 양분해서 평행하게 만들어줘.
+이 데쉬보드의 내용은 3초마다 업데이트 되도록 만들어줘. 화면 백그라운드를 검은색으로 표시하고 그래프와 표는 그 보색들로 표시되서 사람 눈에 확실히 구분되게 표시하도록 하고, 
+처음 1~2초만 표시되고 그래프가 사라지는데, query1의 결과를 3초마다 읽어와서 계속 표시하도록 수정해줘. 
+세번째 쿼리
+"SELECT HOURLY, sum(cnt_status) AS total_cnt from
+(SELECT HOURLY, TASK_STATUS, COUNT(TASK_STATUS) as cnt_status
+FROM (
+    SELECT TO_CHAR(subprocee_starttime,'YYYY-MM-DD HH24:MI') AS hourly,
+           taskname,task_status
+    FROM task
+    WHERE subprocee_starttime BETWEEN (SYSTIMESTAMP - INTERVAL '12' HOUR) AND (SYSTIMESTAMP + INTERVAL '12' HOUR)
+)
+GROUP BY HOURLY, TASK_STATUS
+ORDER BY HOURLY, TASK_STATUS
+)
+GROUP BY HOURLY" 로 그래프에 같은 houly 에 toal_count 를 세로축에 표시하고, total_count 꺽은선을 그래프에 추가해 표시하도록,  다시 코드를 만들어줘.

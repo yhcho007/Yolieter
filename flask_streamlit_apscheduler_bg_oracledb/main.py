@@ -42,12 +42,6 @@ app = Flask(__name__)
 api = Api(app, version='1.0', title='Task Management API',
           description='Oracle DB에 작업을 관리하는 간단 API야!') # 설명도 좀 더 친근하게 바꿔봤어!
 
-# 데이터베이스 연결 정보 (네 정보로 꼭 바꿔줘!)
-DB_USER = 'testcho'
-DB_PASSWORD = '1234'
-DB_DSN = 'your_dsn'
-
-
 # API 모델 정의 (이것도 그대로 쓰면 돼!)
 task_model = api.model('Task', {
     'taskname': fields.String(required=True, description='작업 이름'),
@@ -58,18 +52,6 @@ task_model = api.model('Task', {
 # 백그라운드 프로세스 객체를 저장할 변수
 background_process = None
 
-def get_db_dbconn():
-    """데이터베이스 연결을 가져오는 함수"""
-    logger.info("DB 연결 시도...")
-    try:
-        dbconn = oracledb.connect(user="testcho", password="1234", dsn="127.0.0.1:1521/FREE")
-        logger.info("DB 연결 성공!")
-        return dbconn
-    except Exception as e:
-        logger.info(f"DB 연결 오류: {e}")
-        return None
-
-
 # API 리소스 정의 (이 부분도 그대로!)
 @api.route('/tasks')
 class TaskResource(Resource):
@@ -78,6 +60,7 @@ class TaskResource(Resource):
     @api.response(400, '입력 형식이 잘못되었네.')
     def post(self):
         """새 작업을 등록하는 API"""
+        global dbconn
         data = request.json
         if not data:
              return make_response(jsonify({"message": "요청 본문이 비어있거나 JSON 형식이 아니야."}), 400)
@@ -101,15 +84,11 @@ class TaskResource(Resource):
             return make_response(jsonify({"message": "작업이 성공적으로 등록되었어!"}), 201)
         except oracledb.Error as e:
             logger.info(f"데이터베이스 오류: {e}")
-            if dbconn:
-                dbconn.rollback() # 오류 발생 시 롤백
             return make_response(jsonify({"message": f"데이터베이스 작업 중 오류가 발생했어: {e}"}), 500)
         except Exception as e:
              logger.info(f"예상치 못한 오류 발생: {e}")
              return make_response(jsonify({"message": f"작업 등록 중 예상치 못한 오류가 발생했어: {e}"}), 500)
-        finally:
-            if dbconn:
-                 dbconn.close() # 연결 닫기
+
 
 
     @api.response(200, '성공!')
@@ -122,6 +101,7 @@ class TaskResource(Resource):
         'limit': {'description': '결과 개수 제한 (기본값: all)', 'type': 'integer'} # limit은 integer로 받는 게 좋아!
     })
     def get(self):
+        global dbconn
         """조건에 맞는 작업을 가져오는 API"""
         taskid = request.args.get('taskid')
         taskname = request.args.get('taskname')
@@ -168,10 +148,7 @@ class TaskResource(Resource):
             except ValueError:
                  return make_response(jsonify({"message": "limit은 'all' 이거나 숫자로 입력해야 해!"}), 400)
 
-
-        dbconn = None
         try:
-            dbconn = get_db_dbconn()
             if dbconn is None:
                  return make_response(jsonify({"message": "데이터베이스 연결에 실패했어."}), 500)
 
@@ -192,9 +169,6 @@ class TaskResource(Resource):
         except Exception as e:
              logger.info(f"예상치 못한 오류 발생: {e}")
              return make_response(jsonify({"message": f"작업 조회 중 예상치 못한 오류가 발생했어: {e}"}), 500)
-        finally:
-            if dbconn:
-                 dbconn.close() # 연결 닫기
 
 # sch.py를 백그라운드로 실행하는 함수
 def run_sch_background():
