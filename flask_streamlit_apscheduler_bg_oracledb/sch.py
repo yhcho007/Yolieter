@@ -131,7 +131,8 @@ def check_and_run_tasks():
 
         # Log the number of tasks currently being handled by threads
         with thread_lock:
-            logger.info(f"===== Number of active task threads: {len(active_task_threads)} =====")
+            if len(active_task_threads) > 0:
+                logger.info(f"===== Number of active task threads: {len(active_task_threads)} =====")
 
     except Exception as e:
         logger.error(f"Error in check_and_run_tasks: {e}", exc_info=True)
