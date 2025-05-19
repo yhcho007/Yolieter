@@ -63,20 +63,6 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# --- 데이터베이스 연결 함수 ---
-# `.streamlit/secrets.toml` 파일에 다음과 같이 연결 정보를 저장해야 합니다.
-# [connections.oracle]
-# user = "your_username"
-# password = "your_password"
-# dsn = "your_dsn (e.g., hostname:port/service_name)"
-# 또는
-# user = "your_username"
-# password = "your_password"
-# host = "your_hostname"
-# port = 1521 # 또는 다른 포트
-# service_name = "your_service_name" # 또는 sid = "your_sid"
-
-# Streamlit secrets에서 연결 정보를 가져오기 위한 헬퍼 함수
 log_handler = LogHandler()
 logger = log_handler.getloghandler("main")
 
@@ -101,7 +87,7 @@ def fetch_schedule_status_hourly(conn):
     query = """
     SELECT HOURLY, TASK_STATUS, COUNT(TASK_STATUS) as cnt_status
     FROM (
-        SELECT TO_CHAR(subprocee_starttime,'YYYY-MM-DD HH24:MI') AS hourly,
+        SELECT TO_CHAR(subprocee_starttime,'YYYY-MM-DD HH24') AS hourly,
                taskname, task_status
         FROM task
         WHERE subprocee_starttime BETWEEN (SYSTIMESTAMP - INTERVAL '12' HOUR) AND (SYSTIMESTAMP + INTERVAL '12' HOUR)
@@ -113,7 +99,7 @@ def fetch_schedule_status_hourly(conn):
     FROM (
         SELECT HOURLY, TASK_STATUS, COUNT(TASK_STATUS) as cnt_status
         FROM (
-            SELECT TO_CHAR(subprocee_starttime,'YYYY-MM-DD HH24:MI') AS hourly,
+            SELECT TO_CHAR(subprocee_starttime,'YYYY-MM-DD HH24') AS hourly,
                    taskname, task_status
             FROM task
             WHERE subprocee_starttime BETWEEN (SYSTIMESTAMP - INTERVAL '12' HOUR) AND (SYSTIMESTAMP + INTERVAL '12' HOUR)
@@ -138,7 +124,7 @@ def fetch_schedule_status_hourly(conn):
             merged_df = pd.merge(status_df, total_df, on='HOURLY', how='left')
 
             # Plotly 그래프에서 시간 순서대로 정렬되도록 'HOURLY' 컬럼을 datetime 객체로 변환
-            merged_df['HOURLY'] = pd.to_datetime(merged_df['HOURLY'], format='%Y-%m-%d %H:%M')
+            merged_df['HOURLY'] = pd.to_datetime(merged_df['HOURLY'], format='%Y-%m-%d %H')
             # 시간 순서로 데이터프레임 정렬
             merged_df = merged_df.sort_values(by='HOURLY').reset_index(drop=True)
 
@@ -266,7 +252,7 @@ while True:
 
         if conn:
             # --- 1. 시간대별 스케줄 현황 그래프 ---
-            st.markdown("### 시간대별 스케줄 현황") # 타이틀은 유지
+            st.markdown("<h3 style='color:white;'>시간대별 스케줄 현황</h3>", unsafe_allow_html=True)
 
             # 현재 시간 기준으로 이전 12시간과 이후 12시간 계산
             now = datetime.datetime.now()
@@ -278,10 +264,13 @@ while True:
 
             schedule_data = fetch_schedule_status_hourly(conn)
 
+            # HOURLY 컬럼을 datetime 객체로 변환 (예하가 제공한 코드)
+            # 만약 fetch_schedule_status_hourly 함수 내에서 이미 변환된다면 이 코드는 필요 없을 수도 있어!
+            schedule_data['HOURLY'] = pd.to_datetime(schedule_data['HOURLY'], format='%Y-%m-%d %H')
+
             if not schedule_data.empty:
-                # Plotly Line chart
-                # TASK_STATUS별 cnt_status 라인 추가
-                fig = px.line(
+                # Plotly Bar chart
+                fig = px.bar(
                     schedule_data,
                     x='HOURLY',
                     y='cnt_status',
@@ -289,44 +278,33 @@ while True:
                     title='시간대별 TASK 상태별 스케줄 수'
                 )
 
-                # Total Count 라인 추가
-                # total_cnt는 HOURLY별로 유일하므로, 이 데이터를 직접 추가합니다.
-                # TASK_STATUS 데이터와 같은 x축을 공유
-                # HOURLY 컬럼이 이미 datetime으로 변환되어 정렬된 상태
-                total_plot_df = schedule_data.groupby('HOURLY')['total_cnt'].first().reset_index()
-                fig.add_scatter(
-                    x=total_plot_df['HOURLY'],
-                    y=total_plot_df['total_cnt'],
-                    mode='lines',
-                    name='Total Count', # 범례에 표시될 이름
-                    line=dict(color='red', width=2, dash='dot') # Total Count 라인 스타일 설정
-                )
-
-                # 레이아웃 업데이트 (검은색 배경에 맞게)
+                # 레이아웃 업데이트
                 fig.update_layout(
                     paper_bgcolor='white',
                     plot_bgcolor='white',
                     font_color='black',
-                    xaxis_title=f"시간대 ({time_range_str})", # **수정된 x축 타이틀**
+                    xaxis_title=f"시간대 ({time_range_str})",
                     yaxis_title="스케줄 수",
                     title_font_color='black',
-                    legend_title_font_color='black', # 범례 타이틀 색상
-                    # 범례 항목 글자색은 라인 색상과 동일하게 표시됩니다.
-                    xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.2)'),
+                    legend_title_font_color='black',
+                    xaxis=dict(
+                        showgrid=True,
+                        gridcolor='rgba(255,255,255,0.2)',
+                        type='category',  # 시간축을 명확하게 카테고리로 설정
+                        # **여기서 x축 표시 형식을 수정하는 거야!**
+                        tickformat='%Y-%m-%dT%H'  # 예하가 원하는 "YYYY-MM-DDTHH" 형식
+                    ),
                     yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.2)'),
-                    hovermode='x unified', # 마우스 올렸을 때 같은 x축 시간대의 모든 라인 정보 표시
-                    # Plotly는 기본적으로 범례 항목의 텍스트 색상을 해당 라인/마커 색상과 일치시킵니다.
+                    hovermode='x unified',
                 )
 
-                st.plotly_chart(fig, use_container_width=True) # 화면 폭에 맞게 조절
-                # st.markdown("<p style='text-align: center; color: white;'>시간대: 이전 12시간 ~ 이후 12시간</p>", unsafe_allow_html=True) # **이 라인 삭제**
-
+                st.plotly_chart(fig, use_container_width=True)
 
             else:
                 st.info("시간대별 스케줄 현황 데이터를 가져오지 못했습니다.")
 
             # --- 2. 스케줄 등록 현황 표 ---
-            st.markdown("### 스케줄 등록 현황")
+            st.markdown("<h3 style='color:white;'>스케줄 등록 현황</h3>", unsafe_allow_html=True)
             schedule_list_df = fetch_schedule_list(conn)
 
             if not schedule_list_df.empty:
@@ -338,43 +316,44 @@ while True:
                  st.info("스케줄 등록 현황 데이터를 가져오지 못했습니다.")
 
             # --- 3. 시스템 메트릭스 (CPU, Memory, Disk, Network) ---
-            st.markdown("### 시스템 메트릭스")
+            st.markdown("<h3 style='color:white;'>시스템 메트릭스</h3>", unsafe_allow_html=True)
             system_metrics = get_system_metrics() # 실제 psutil 데이터 사용
 
             # 시스템 메트릭스를 한 줄에 표시
             metrics_text = (
-                f"CPU 사용률: **{system_metrics['cpu_usage']}** &nbsp;&nbsp;&nbsp;&nbsp;"
-                f"메모리 사용률: **{system_metrics['memory_usage']}** &nbsp;&nbsp;&nbsp;&nbsp;"
-                f"디스크 사용률: **{system_metrics['disk_usage']}** &nbsp;&nbsp;&nbsp;&nbsp;"
-                f"네트워크 Input: **{system_metrics['network_input_kb']}** &nbsp;&nbsp;&nbsp;&nbsp;"
-                f"네트워크 Output: **{system_metrics['network_output_kb']}**"
+                f"CPU 사용률: {system_metrics['cpu_usage']} &nbsp;&nbsp;&nbsp;&nbsp;"
+                f"메모리 사용률: {system_metrics['memory_usage']} &nbsp;&nbsp;&nbsp;&nbsp;"
+                f"디스크 사용률: {system_metrics['disk_usage']} &nbsp;&nbsp;&nbsp;&nbsp;"
+                f"네트워크 Input: {system_metrics['network_input_kb']} &nbsp;&nbsp;&nbsp;&nbsp;"
+                f"네트워크 Output: {system_metrics['network_output_kb']}"
             )
-            st.markdown(metrics_text, unsafe_allow_html=True)
+            st.markdown("<h5 style='color:white;'>" + metrics_text + "</h5>", unsafe_allow_html=True)
 
             # 총 메모리, 사용 중, 사용 가능 메모리 표시
             memory_details_text = (
-                f"총 메모리: **{system_metrics['total_memory_gb']}**, "
-                f"사용 중: **{system_metrics['used_memory_gb']}**, "
-                f"사용 가능: **{system_metrics['available_memory_gb']}**"
+                f"총 메모리: {system_metrics['total_memory_gb']}, "
+                f"사용 중: {system_metrics['used_memory_gb']}, "
+                f"사용 가능: {system_metrics['available_memory_gb']}"
             )
-            st.markdown(memory_details_text, unsafe_allow_html=True) # bold 적용을 위해 unsafe_allow_html=True 사용
+            # bold 적용을 위해 unsafe_allow_html=True 사용
+            st.markdown("<h5 style='color:white;'>" + memory_details_text + "</h5>", unsafe_allow_html=True)
 
             # --- 4. CPU/Memory 사용률 상위 프로세스 (Top 5) ---
-            st.markdown("### 상위 프로세스")
+            st.markdown("<h3 style='color:white;'>상위 프로세스</h3>", unsafe_allow_html=True)
             top_cpu_df, top_mem_df = get_top_processes() # 실제 psutil 데이터 사용
 
             # 화면을 두 열로 나누어 평행하게 표시
             col1, col2 = st.columns(2)
 
             with col1:
-                st.markdown("#### CPU 사용률 상위 프로세스 (Top 5)")
+                st.markdown("<h3 style='color:white;'>CPU 사용률 상위 프로세스 (Top 5)</h3>", unsafe_allow_html=True)
                 if not top_cpu_df.empty:
                     st.dataframe(top_cpu_df, use_container_width=True)
                 else:
                      st.info("CPU 사용률 상위 프로세스 데이터를 가져오지 못했습니다.")
 
             with col2:
-                st.markdown("#### Memory 사용률 상위 프로세스 (Top 5)")
+                st.markdown("<h3 style='color:white;'>Memory 사용률 상위 프로세스 (Top 5)</h3>", unsafe_allow_html=True)
                 if not top_mem_df.empty:
                      st.dataframe(top_mem_df, use_container_width=True)
                 else:
