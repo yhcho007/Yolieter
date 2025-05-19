@@ -1,4 +1,4 @@
-import os
+import oracledb
 import pandas as pd
 from datetime import datetime
 import sys
@@ -50,9 +50,11 @@ def signal_handler(sig, frame):
     logger.info("Process terminated. Status updated to 'K'.")
     sys.exit(0)
 
-def main(taskid):
-    global dbconn
-    logger.info("main start 1")
+def main(taskid_input):
+    global taskid, dbconn
+    taskid = taskid_input
+
+
     # 종료 신호 처리 등록
     signal.signal(signal.SIGINT, signal_handler)  # Ctrl+C
     signal.signal(signal.SIGTERM, signal_handler)  # kill 명령

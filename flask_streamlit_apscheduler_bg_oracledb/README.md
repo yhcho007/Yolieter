@@ -1,5 +1,4 @@
 # Task Management System
-
 ## 구성 요소
 
 ### 1. main.py
