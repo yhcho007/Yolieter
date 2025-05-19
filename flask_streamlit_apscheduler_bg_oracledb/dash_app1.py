@@ -1,492 +1,391 @@
+# 필요한 라이브러리 설치
+# pip install streamlit oracledb pandas plotly psutil
+
 import streamlit as st
 import oracledb
 import pandas as pd
-import psutil
 import time
-from datetime import datetime, timedelta
-import altair as alt
-from streamlit_autorefresh import st_autorefresh
-import numpy as np
+import plotly.express as px
+import datetime
+import psutil # psutil 라이브러리 추가
 from common.dbhandler import DBHandler
 from common.loghandler import LogHandler
 
-# ✨ 페이지 설정: 화면 전체 폭 사용 및 브라우저 탭 제목 설정
-st.set_page_config(layout="wide", page_title="스케줄데쉬보드")
+# --- 페이지 설정 ---
+st.set_page_config(
+    page_title="스케줄데쉬보드",  # 브라우저 탭 제목
+    layout="wide",             # 화면 전체 폭 사용
+    initial_sidebar_state="collapsed" # 사이드바 기본 상태
+)
 
-# ✨ 자동 새로고침 설정 (3초 간격) - 이게 대시보드를 계속 최신 상태로 유지해 줄 거야!
-st_autorefresh(interval=3000, key="dashboard_refresh")
-
-# ✨ 커스텀 CSS로 스타일 적용 (검은 배경, 글자색, 그래프/표 색상 대비 등)
+# --- 사용자 정의 CSS로 배경색 설정 ---
+# 그래프와 테이블 색상은 플로틀리/판다스 기본 색상 또는 설정 가능한 색상으로 표시됩니다.
+# 전체적인 대비를 위해 플로틀리 테마를 어둡게 설정할 수 있습니다.
 st.markdown(
     """
     <style>
-    /* 전체 배경색 */
     body {
-        background-color: #121212; /* 아주 어두운 회색 (거의 검은색) */
-        color: #e0e0e0; /* 밝은 회색 글자색 */
+        background-color: #000000; /* 검은색 배경 */
+        color: #FFFFFF; /* 글자색을 흰색으로 설정 (필요에 따라 조정) */
     }
-    /* 스트림릿 메인 영역 배경색 */
     .stApp {
-        background-color: #121212;
-        color: #e0e0e0;
+        background-color: #000000; /* Streamlit 앱 컨테이너 배경색 */
     }
-     /* 제목 및 텍스트 색상 */
-    h1, h2, h3, h4, h5, h6, label, .st-bc, .st-bo, .st-bt, .st-bw, .st-bx, .st-by, .st-bz, .st-cr, .st-cs, .st-ct, .st-cu, .st-cv, .st-cw {
-        color: #ffffff !important; /* 흰색 */
+    /* Streamlit 기본 위젯들의 색상 조정 */
+    /* st.dataframe을 위한 스타일 */
+    div[data-testid="stDataFrame"] {
+        color: #FFFFFF; /* 데이터프레임 글자색 */
+        background-color: #1c1c1c; /* 데이터프레임 배경색 (조금 더 밝게) */
+        border: 1px solid #333333; /* 테두리 색상 */
     }
-    /* 표 헤더 색상 */
-    .dataframe thead th {
-        background-color: #3700b3 !important; /* 보라색 계열 */
-        color: #ffffff !important;
-        font-weight: bold !important;
+    div[data-testid="stDataFrame"] .dataframe th {
+        color: #AAAAAA; /* 헤더 글자색 */
+        background-color: #2a2a2a; /* 헤더 배경색 */
+        font-weight: bold; /* 헤더 볼드체 */
+        border: 1px solid #333333; /* 헤더 테두리 색상 */
     }
-    /* 표 본문 색상 */
-    .dataframe tbody tr {
-        background-color: #1f1f1f !important; /* 약간 밝은 어두운 회색 */
-        color: #bbbbbb !important; /* 약간 어두운 밝은 회색 */
+     div[data-testid="stDataFrame"] .dataframe td {
+        border: 1px solid #333333; /* 셀 테두리 색상 */
     }
-     /* 표 본문 짝수 행 배경색 */
-    .dataframe tbody tr:nth-child(even) {
-        background-color: #333333 !important; /* 좀 더 밝은 어두운 회색 */
+     div[data-testid="stDataFrame"] .dataframe tr:nth-child(even) {
+        background-color: #1c1c1c; /* 짝수 행 배경색 */
     }
-    /* 표 본문 홀수 행 배경색 */
-    .dataframe tbody tr:nth-child(odd) {
-        background-color: #1f1f1f !important;
+     div[data-testid="stDataFrame"] .dataframe tr:nth-child(odd) {
+        background-color: #202020; /* 홀수 행 배경색 */
     }
-    /* 표 테두리 색상 */
-    .dataframe, .dataframe th, .dataframe td {
-        border-color: #6200ee !important; /* 보라색 테두리 */
+    /* 스크롤바 스타일 (선택 사항) */
+    div[data-testid="stDataFrame"] .dataframe-container {
+        scrollbar-color: #555 #222;
+        scrollbar-width: thin;
     }
-    /* plotly 그래프 배경 투명하게 */
-    .st-emotion-cache-16z0x3n, .st-emotion-cache-18ni7f0, .st-emotion-cache-vj1z9k {
-        background-color: rgba(0,0,0,0) !important; /* 배경 투명 */
-    }
-     /* 알테어 차트 배경 투명하게 */
-    .st-emotion-cache-vj1z9k {
-         background-color: rgba(0,0,0,0) !important; /* 배경 투명 */
-    }
-     /* 알테어 툴팁 배경색 및 글자색 (조절 필요시) */
-    .vg-tooltip {
-        background-color: #333333 !important; /* 어두운 배경 */
-        color: #ffffff !important; /* 밝은 글자 */
-        border: 1px solid #6200ee !important;
-    }
-    /* 알테어 차트 라벨 및 축 색상 */
-    .mark-text, .mark-rule, .mark-axis text, .mark-axis line, .mark-axis path {
-         fill: #e0e0e0 !important; /* 밝은 회색 */
-         stroke: #e0e0e0 !important; /* 밝은 회색 */
-    }
-    .mark-axis text {
-        /* 축 라벨 폰트 사이즈 조정 (필요시) */
-        /* font-size: 12px; */
-    }
-
-
-    /* 전체적으로 글씨 좀 더 크게 (필요시 조절) */
-    .st-emotion-cache-1avcm0c, .st-emotion-cache-1g0bnhg, .st-emotion-cache-1hynsf2, .st-emotion-cache-10q1wdv, .st-emotion-cache-1gh52i {
-        font-size: 15px !important;
-    }
-
-    /* CPU/Memory 등 메트릭스 표시 스타일 */
-    .metric-container {
-        display: flex;
-        justify-content: space-around; /* 항목 간 간격 균등 분배 */
-        align-items: center;
-        padding: 10px;
-        margin-bottom: 20px;
-        background-color: #1f1f1f; /* 어두운 배경 */
-        border-radius: 8px;
-        flex-wrap: wrap; /* 화면 좁아지면 줄 바꿈 */
-        border: 1px solid #03dac6; /* 청록색 테두리 */
-    }
-    .metric-item {
-        margin: 5px 10px; /* 항목 간 여백 */
-        text-align: center;
-    }
-    .metric-label {
-        font-size: 14px;
-        color: #bbbbbb; /* 밝은 회색 레이블 */
-        margin-bottom: 3px;
-    }
-    .metric-value {
-        font-size: 18px;
-        font-weight: bold;
-        color: #03dac6; /* 청록색 값 */
-    }
-     /* 메모리 상세 정보 스타일 */
-    .memory-details-container {
-        display: flex;
-        justify-content: center; /* 중앙 정렬 */
-        align-items: center;
-        padding: 10px;
-        margin-bottom: 20px;
-        background-color: #1f1f1f; /* 어두운 배경 */
-        border-radius: 8px;
-        flex-wrap: wrap; /* 화면 좁아지면 줄 바꿈 */
-        border: 1px solid #cf6679; /* 붉은색 계열 테두리 */
-    }
-     .memory-item {
-        margin: 5px 10px; /* 항목 간 여백 */
-        font-size: 16px;
-        color: #e0e0e0; /* 밝은 글자색 */
-     }
-     .memory-item strong {
-        color: #ffcc00; /* 노란색 강조 */
-     }
-
     </style>
     """,
     unsafe_allow_html=True
 )
 
+# --- 데이터베이스 연결 함수 ---
+# `.streamlit/secrets.toml` 파일에 다음과 같이 연결 정보를 저장해야 합니다.
+# [connections.oracle]
+# user = "your_username"
+# password = "your_password"
+# dsn = "your_dsn (e.g., hostname:port/service_name)"
+# 또는
+# user = "your_username"
+# password = "your_password"
+# host = "your_hostname"
+# port = 1521 # 또는 다른 포트
+# service_name = "your_service_name" # 또는 sid = "your_sid"
+
+# Streamlit secrets에서 연결 정보를 가져오기 위한 헬퍼 함수
 log_handler = LogHandler()
 logger = log_handler.getloghandler("main")
 
 db_handler = DBHandler()
-conn = db_handler.get_db_connection(logger)
+db_config = db_handler.get_db_config()
 
-# ✨ 데이터 가져오는 함수 (Query 1, Query 2, Query 3 모두 실행)
-# 이 함수는 새로고침될 때마다 실행돼서 최신 데이터를 가져옴.
-def fetch_data(conn):
-    if not conn:
-        return None, None, None, "DB 연결 실패"
+def get_oracle_connection():
+    try:
+        # Streamlit secrets에서 연결 정보 가져오기
+        conn = oracledb.connect(
+            user=db_config['user'], password=db_config['password'], dsn=db_config['dsn']
+        )
+        return conn
+    except Exception as e:
+        st.error(f"데이터베이스 연결 오류: {e}")
+        return None
 
-    # 시간대 필터링은 쿼리 자체에 포함되어 있어.
-    # Query 1: TASK_STATUS 별 건수
-    query1 = """
+# --- 데이터 가져오는 함수들 ---
+
+def fetch_schedule_status_hourly(conn):
+    """시간대별 스케줄 현황 및 총 개수 데이터 가져오기 (이전 12시간 ~ 이후 12시간)"""
+    query = """
     SELECT HOURLY, TASK_STATUS, COUNT(TASK_STATUS) as cnt_status
     FROM (
         SELECT TO_CHAR(subprocee_starttime,'YYYY-MM-DD HH24:MI') AS hourly,
-               taskname,
-               task_status
+               taskname, task_status
         FROM task
         WHERE subprocee_starttime BETWEEN (SYSTIMESTAMP - INTERVAL '12' HOUR) AND (SYSTIMESTAMP + INTERVAL '12' HOUR)
     )
     GROUP BY HOURLY, TASK_STATUS
-    ORDER BY HOURLY, TASK_STATUS
-    """
-
-    # Query 2: 스케줄 목록
-    query2 = """
-    SELECT taskid, subprocee_starttime, taskname, task_status
-    FROM task
-    ORDER BY subprocee_starttime DESC
-    """ # 최신 작업부터 보여주도록 정렬
-
-    # Query 3: 시간대별 총 건수
-    query3 = """
-    SELECT HOURLY, SUM(cnt_status) AS total_cnt
+    """ # ORDER BY HOURLY 제거 - plotly에서 자동 정렬
+    total_query = """
+    SELECT HOURLY, sum(cnt_status) AS total_cnt
     FROM (
-        SELECT TO_CHAR(subprocee_starttime,'YYYY-MM-DD HH24:MI') AS hourly,
-               taskname, task_status, COUNT(TASK_STATUS) as cnt_status
-        FROM task
-        WHERE subprocee_starttime BETWEEN (SYSTIMESTAMP - INTERVAL '12' HOUR) AND (SYSTIMESTAMP + INTERVAL '12' HOUR)
-        GROUP BY TO_CHAR(subprocee_starttime,'YYYY-MM-DD HH24:MI'), taskname, task_status -- 내부 그룹핑
+        SELECT HOURLY, TASK_STATUS, COUNT(TASK_STATUS) as cnt_status
+        FROM (
+            SELECT TO_CHAR(subprocee_starttime,'YYYY-MM-DD HH24:MI') AS hourly,
+                   taskname, task_status
+            FROM task
+            WHERE subprocee_starttime BETWEEN (SYSTIMESTAMP - INTERVAL '12' HOUR) AND (SYSTIMESTAMP + INTERVAL '12' HOUR)
+        )
+        GROUP BY HOURLY, TASK_STATUS
     )
     GROUP BY HOURLY
-    ORDER BY HOURLY -- 시간대별 정렬 추가
-    """
-
-
-    df_schedule_status = None
-    df_task_list = None
-    df_total_count = None
-    error_message = None
-
+    """ # ORDER BY HOURLY 제거 - plotly에서 자동 정렬
     try:
         with conn.cursor() as cursor:
-            # Query 1 실행
-            cursor.execute(query1)
-            rows1 = cursor.fetchall()
-            cols1 = [col[0] for col in cursor.description]
-            df_schedule_status = pd.DataFrame(rows1, columns=cols1)
+            cursor.execute(query)
+            status_data = cursor.fetchall()
+            status_df = pd.DataFrame(status_data, columns=['HOURLY', 'TASK_STATUS', 'cnt_status'])
 
-            # Query 2 실행
-            cursor.execute(query2)
-            rows2 = cursor.fetchall()
-            cols2 = [col[0] for col in cursor.description]
-            df_task_list = pd.DataFrame(rows2, columns=cols2)
+            cursor.execute(total_query)
+            total_data = cursor.fetchall()
+            total_df = pd.DataFrame(total_data, columns=['HOURLY', 'total_cnt'])
 
-            # Query 3 실행
-            cursor.execute(query3)
-            rows3 = cursor.fetchall()
-            cols3 = [col[0] for col in cursor.description]
-            df_total_count = pd.DataFrame(rows3, columns=cols3)
+            # 두 데이터프레임을 HOURLY 기준으로 병합
+            # 혹시 모를 중복 합산을 막기 위해, total_df에서는 HOURLY당 첫 번째 total_cnt 값만 사용
+            total_df = total_df.groupby('HOURLY').first().reset_index()
+            merged_df = pd.merge(status_df, total_df, on='HOURLY', how='left')
 
+            # Plotly 그래프에서 시간 순서대로 정렬되도록 'HOURLY' 컬럼을 datetime 객체로 변환
+            merged_df['HOURLY'] = pd.to_datetime(merged_df['HOURLY'], format='%Y-%m-%d %H:%M')
+            # 시간 순서로 데이터프레임 정렬
+            merged_df = merged_df.sort_values(by='HOURLY').reset_index(drop=True)
+
+            return merged_df
     except Exception as e:
-        error_message = f"데이터 쿼리 실패: {e}"
-        st.error(error_message)
+        st.error(f"시간대별 스케줄 현황 데이터 가져오기 오류: {e}")
+        return pd.DataFrame() # 빈 데이터프레임 반환
 
-
-    # 'HOURLY' 컬럼을 datetime 형식으로 변환하여 정렬 가능하게 함
-    # (Altair에서 시간 축으로 인식하게 하려면 이 형식이 좋음)
-    if df_schedule_status is not None and not df_schedule_status.empty:
-        # Oracle에서 가져온 컬럼 이름은 대문자일 수 있습니다.
-        if 'HOURLY' in df_schedule_status.columns:
-            df_schedule_status['HOURLY_dt'] = pd.to_datetime(df_schedule_status['HOURLY'], format='%Y-%m-%d %H:%M')
-            df_schedule_status = df_schedule_status.sort_values('HOURLY_dt').drop(columns='HOURLY_dt')
-             # 컬럼 이름 소문자로 변경하여 Altair와 호환성 높이기
-            df_schedule_status.columns = [col.lower() for col in df_schedule_status.columns]
-        else: # 소문자 컬럼으로 이미 와 있다면
-            df_schedule_status['hourly_dt'] = pd.to_datetime(df_schedule_status['hourly'], format='%Y-%m-%d %H:%M')
-            df_schedule_status = df_schedule_status.sort_values('hourly_dt').drop(columns='hourly_dt')
-
-
-    if df_total_count is not None and not df_total_count.empty:
-         if 'HOURLY' in df_total_count.columns:
-             df_total_count['HOURLY_dt'] = pd.to_datetime(df_total_count['HOURLY'], format='%Y-%m-%d %H:%M')
-             df_total_count = df_total_count.sort_values('HOURLY_dt').drop(columns='HOURLY_dt')
-             # 컬럼 이름 소문자로 변경
-             df_total_count.columns = [col.lower() for col in df_total_count.columns]
-         else: # 소문자 컬럼으로 이미 와 있다면
-             df_total_count['hourly_dt'] = pd.to_datetime(df_total_count['hourly'], format='%Y-%m-%d %H:%M')
-             df_total_count = df_total_count.sort_values('hourly_dt').drop(columns='hourly_dt')
-
-
-    # 그래프를 위해 Query 1과 Query 3 결과를 합치기
-    df_for_chart = pd.DataFrame() # 기본적으로 빈 데이터프레임으로 초기화
-    chart_data_available = False
-
-    if df_schedule_status is not None and not df_schedule_status.empty:
-         # Query 1 결과 컬럼 이름 조정 (count)
-         df_schedule_status_renamed = df_schedule_status.rename(columns={'cnt_status': 'count'})
-         df_for_chart = pd.concat([df_for_chart, df_schedule_status_renamed])
-         chart_data_available = True
-
-
-    if df_total_count is not None and not df_total_count.empty:
-         # Query 3 결과 컬럼 이름 조정 (count) 및 'TASK_STATUS' 컬럼 추가 ('TOTAL' 값으로)
-         df_total_count_renamed = df_total_count.rename(columns={'total_cnt': 'count'})
-         df_total_count_renamed['task_status'] = 'TOTAL'
-         df_for_chart = pd.concat([df_for_chart, df_total_count_renamed])
-         chart_data_available = True
-
-
-    # 합친 후 시간대 기준으로 다시 정렬 (안정성을 위해)
-    if chart_data_available:
-         print('chart_data_available')
-         df_for_chart['hourly_dt'] = pd.to_datetime(df_for_chart['hourly'], format='%Y-%m-%d %H:%M')
-         df_for_chart = df_for_chart.sort_values('hourly_dt').drop(columns='hourly_dt')
-
-         # Altair에서 사용할 숫자 컬럼이 숫자 타입인지 확인 (안전 장치)
-         df_for_chart['count'] = pd.to_numeric(df_for_chart['count'], errors='coerce')
-         df_for_chart.dropna(subset=['count'], inplace=True) # 숫자로 변환 실패한 행 제거
-         if df_for_chart.empty:
-             print('df_for_chart.empty')
-             chart_data_available = False # 유효한 데이터가 없으면 플래그 변경
-
-
-    return df_for_chart if chart_data_available else pd.DataFrame(), df_task_list, error_message
-
-# ✨ 시스템 메트릭스 가져오는 함수
-def get_system_metrics():
-    # interval을 0으로 주면 함수 호출 시점의 값을 즉시 반환 (캐싱하지 않음)
-    cpu_percent = psutil.cpu_percent(interval=0.1) # 짧은 간격으로 측정
-    memory = psutil.virtual_memory()
-    # Windows의 경우 'C:', Linux/macOS의 경우 '/'
-    disk_percent = None
+def fetch_schedule_list(conn):
+    """스케줄 등록 현황 데이터 가져오기"""
+    query = "SELECT taskid, subprocee_starttime, taskname, task_status FROM task ORDER BY subprocee_starttime DESC" # 최신 순 정렬
     try:
-        disk = psutil.disk_usage('/')
-        disk_percent = disk.percent
+        with conn.cursor() as cursor:
+            cursor.execute(query)
+            data = cursor.fetchall()
+            df = pd.DataFrame(data, columns=['taskid', 'subprocee_starttime', 'taskname', 'task_status'])
+            return df
     except Exception as e:
-         # st.warning(f"디스크 사용률 정보 가져오기 실패: {e}. 루트 파티션('/') 확인 필요.") # 운영 시 메시지 숨김
-         pass # 오류 발생 시 None으로 처리
+        st.error(f"스케줄 등록 현황 데이터 가져오기 오류: {e}")
+        return pd.DataFrame() # 빈 데이터프레임 반환
 
-    net_io = psutil.net_io_counters()
+def get_system_metrics():
+    """시스템 메트릭스 (CPU, Memory, Disk, Network) 실제 데이터 가져오기 (psutil 사용)"""
+    try:
+        # CPU 사용률 (0.5초 간격으로 측정)
+        cpu_percent = psutil.cpu_percent(interval=0.5)
 
-    # 바이트를 KB로 변환
-    bytes_to_kb = lambda b: b / 1024 if b is not None else 0
+        # 메모리 사용률
+        mem = psutil.virtual_memory()
+        total_memory_gb = mem.total / (1024**3) # Bytes to GB
+        used_memory_gb = mem.used / (1024**3)   # Bytes to GB
+        available_memory_gb = mem.available / (1024**3) # Bytes to GB
+        memory_percent = mem.percent
 
-    metrics = {
-        "cpu_percent": cpu_percent,
-        "memory_percent": memory.percent,
-        "disk_percent": disk_percent,
-        "net_input_kb": bytes_to_kb(net_io.bytes_recv),
-        "net_output_kb": bytes_to_kb(net_io.bytes_sent),
-        "total_memory_gb": memory.total / (1024**3),
-        "used_memory_gb": memory.used / (1024**3),
-        "available_memory_gb": memory.available / (1024**3),
-    }
-    return metrics
-
-# ✨ 상위 프로세스 가져오는 함수
-@st.cache_data(ttl=3) # 프로세스 목록은 3초마다 캐시 갱신
-def get_top_processes(num=5):
-    processes = []
-    for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
+        # 디스크 사용률 (루트 디렉토리 기준)
+        # 윈도우의 경우 'C:\\' 등으로 경로를 수정해야 할 수 있습니다.
         try:
-            pinfo = proc.as_dict(attrs=['pid', 'name', 'cpu_percent', 'memory_percent'])
-            # cpu_percent는 interval 동안의 평균이므로, 즉시 값을 보려면 interval=0을 주거나,
-            # 측정 시점의 스냅샷을 사용해야 하지만 psutil의 cpu_percent는 기본적으로 blocking.
-            # 여기서는 간편하게 마지막 측정값 사용.
-            if pinfo.get('cpu_percent') is not None:
-                 pinfo['cpu_percent'] = round(pinfo['cpu_percent'], 1) # 소수점 첫째자리까지
+            disk = psutil.disk_usage('/')
+            disk_percent = disk.percent
+        except Exception as disk_e:
+             st.warning(f"디스크 사용률 정보 가져오기 오류 (루트 디렉토리 '/'): {disk_e}. 다른 경로를 시도해보세요.")
+             disk_percent = "N/A" # 오류 발생 시 N/A 표시
 
-            if pinfo.get('memory_percent') is not None:
-                 pinfo['memory_percent'] = round(pinfo['memory_percent'], 1) # 소수점 첫째자리까지
 
-            processes.append(pinfo)
-        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-            # 프로세스가 사라지거나 접근 권한이 없을 때 발생 가능
+        # 네트워크 I/O (누적 값)
+        # 정확한 초당 Rate를 계산하려면 이전 값을 저장해야 하나,
+        # 여기서는 간단히 누적 바이트 값을 KB로 변환하여 표시합니다.
+        net_io = psutil.net_io_counters()
+        network_input_kb = net_io.bytes_recv / 1024 # Bytes to KB
+        network_output_kb = net_io.bytes_sent / 1024 # Bytes to KB
+
+        return {
+            "cpu_usage": f"{cpu_percent:.1f}%",
+            "memory_usage": f"{memory_percent:.1f}%",
+            "disk_usage": f"{disk_percent:.1f}%" if isinstance(disk_percent, float) else str(disk_percent),
+            "network_input_kb": f"{network_input_kb:,.2f} KB", # 천 단위 구분 기호 추가
+            "network_output_kb": f"{network_output_kb:,.2f} KB", # 천 단위 구분 기호 추가
+            "total_memory_gb": f"{total_memory_gb:.2f} GB",
+            "used_memory_gb": f"{used_memory_gb:.2f} GB",
+            "available_memory_gb": f"{available_memory_gb:.2f} GB"
+        }
+    except Exception as e:
+        st.error(f"시스템 메트릭스 가져오기 오류: {e}")
+        # 오류 발생 시 기본값 반환
+        return {
+            "cpu_usage": "N/A", "memory_usage": "N/A", "disk_usage": "N/A",
+            "network_input_kb": "N/A", "network_output_kb": "N/A",
+            "total_memory_gb": "N/A", "used_memory_gb": "N/A", "available_memory_gb": "N/A"
+        }
+
+
+def get_top_processes():
+    """CPU 및 Memory 사용률 상위 프로세스 목록 가져오기 (psutil 사용)"""
+    top_cpu_processes = []
+    top_mem_processes = []
+    try:
+        # 모든 프로세스 정보 가져오기
+        # cpu_percent는 interval이 없으면 누적 값 또는 0을 반환할 수 있습니다.
+        # 간단한 대시보드에서는 instantaneous percentage를 사용합니다.
+        # 실제 사용률은 직전 호출 이후의 변화를 측정해야 정확합니다.
+        processes = []
+        # psutil.process_iter는 AccessDenied 오류가 발생할 수 있으므로 try-except로 감싸줍니다.
+        for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
+             try:
+                 pinfo = proc.info
+                 processes.append(pinfo)
+             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                 # 해당 프로세스가 존재하지 않거나 접근이 거부되거나 좀비 프로세스인 경우 건너뜀
+                 pass
+
+        # CPU 사용률 기준 정렬 (내림차순)
+        top_cpu_processes = sorted(processes, key=lambda x: x.get('cpu_percent', 0.0), reverse=True)[:5]
+        # Memory 사용률 기준 정렬 (내림차순)
+        top_mem_processes = sorted(processes, key=lambda x: x.get('memory_percent', 0.0), reverse=True)[:5]
+
+        # DataFrame 생성
+        cpu_df = pd.DataFrame(top_cpu_processes)
+        if not cpu_df.empty:
+             cpu_df = cpu_df[['pid', 'name', 'cpu_percent']]
+             cpu_df.columns = ['PID', 'Name', 'CPU%']
+             cpu_df['CPU%'] = cpu_df['CPU%'].apply(lambda x: f"{x:.1f}%") # 소수점 첫째 자리까지 표시
+
+        mem_df = pd.DataFrame(top_mem_processes)
+        if not mem_df.empty:
+             mem_df = mem_df[['pid', 'name', 'memory_percent']]
+             mem_df.columns = ['PID', 'Name', 'MEM%']
+             mem_df['MEM%'] = mem_df['MEM%'].apply(lambda x: f"{x:.1f}%") # 소수점 첫째 자리까지 표시
+
+
+        return cpu_df, mem_df
+    except Exception as e:
+        st.error(f"상위 프로세스 목록 가져오기 오류: {e}")
+        return pd.DataFrame(), pd.DataFrame() # 오류 발생 시 빈 데이터프레임 반환
+
+
+# --- 대시보드 레이아웃 및 표시 ---
+
+# 3초마다 업데이트를 위한 루프 시작
+while True:
+    # 컨테이너를 사용하여 내용을 묶고, 새로고침 시 이전 내용을 지움
+    container = st.empty()
+
+    with container.container():
+        conn = get_oracle_connection()
+
+        if conn:
+            # --- 1. 시간대별 스케줄 현황 그래프 ---
+            st.markdown("### 시간대별 스케줄 현황") # 타이틀은 유지
+
+            # 현재 시간 기준으로 이전 12시간과 이후 12시간 계산
+            now = datetime.datetime.now()
+            time_before_12h = now - datetime.timedelta(hours=12)
+            time_after_12h = now + datetime.timedelta(hours=12)
+
+            # 시간대 문자열 생성 (예: "2025-05-18 22:00 ~ 2025-05-19 22:00")
+            time_range_str = f"{time_before_12h.strftime('%Y-%m-%d %H:%M')} ~ {time_after_12h.strftime('%Y-%m-%d %H:%M')}"
+
+            schedule_data = fetch_schedule_status_hourly(conn)
+
+            if not schedule_data.empty:
+                # Plotly Line chart
+                # TASK_STATUS별 cnt_status 라인 추가
+                fig = px.line(
+                    schedule_data,
+                    x='HOURLY',
+                    y='cnt_status',
+                    color='TASK_STATUS',
+                    title='시간대별 TASK 상태별 스케줄 수'
+                )
+
+                # Total Count 라인 추가
+                # total_cnt는 HOURLY별로 유일하므로, 이 데이터를 직접 추가합니다.
+                # TASK_STATUS 데이터와 같은 x축을 공유
+                # HOURLY 컬럼이 이미 datetime으로 변환되어 정렬된 상태
+                total_plot_df = schedule_data.groupby('HOURLY')['total_cnt'].first().reset_index()
+                fig.add_scatter(
+                    x=total_plot_df['HOURLY'],
+                    y=total_plot_df['total_cnt'],
+                    mode='lines',
+                    name='Total Count', # 범례에 표시될 이름
+                    line=dict(color='red', width=2, dash='dot') # Total Count 라인 스타일 설정
+                )
+
+                # 레이아웃 업데이트 (검은색 배경에 맞게)
+                fig.update_layout(
+                    paper_bgcolor='white',
+                    plot_bgcolor='white',
+                    font_color='black',
+                    xaxis_title=f"시간대 ({time_range_str})", # **수정된 x축 타이틀**
+                    yaxis_title="스케줄 수",
+                    title_font_color='black',
+                    legend_title_font_color='black', # 범례 타이틀 색상
+                    # 범례 항목 글자색은 라인 색상과 동일하게 표시됩니다.
+                    xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.2)'),
+                    yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.2)'),
+                    hovermode='x unified', # 마우스 올렸을 때 같은 x축 시간대의 모든 라인 정보 표시
+                    # Plotly는 기본적으로 범례 항목의 텍스트 색상을 해당 라인/마커 색상과 일치시킵니다.
+                )
+
+                st.plotly_chart(fig, use_container_width=True) # 화면 폭에 맞게 조절
+                # st.markdown("<p style='text-align: center; color: white;'>시간대: 이전 12시간 ~ 이후 12시간</p>", unsafe_allow_html=True) # **이 라인 삭제**
+
+
+            else:
+                st.info("시간대별 스케줄 현황 데이터를 가져오지 못했습니다.")
+
+            # --- 2. 스케줄 등록 현황 표 ---
+            st.markdown("### 스케줄 등록 현황")
+            schedule_list_df = fetch_schedule_list(conn)
+
+            if not schedule_list_df.empty:
+                # st.dataframe은 기본적으로 스크롤 기능을 지원합니다.
+                # 높이를 설정하면 해당 높이를 넘을 때 스크롤바가 생깁니다.
+                # 스타일은 상단의 CSS에 정의되어 있습니다.
+                st.dataframe(schedule_list_df, use_container_width=True, height=350) # 약 10-12개 row 표시 가능한 높이
+            else:
+                 st.info("스케줄 등록 현황 데이터를 가져오지 못했습니다.")
+
+            # --- 3. 시스템 메트릭스 (CPU, Memory, Disk, Network) ---
+            st.markdown("### 시스템 메트릭스")
+            system_metrics = get_system_metrics() # 실제 psutil 데이터 사용
+
+            # 시스템 메트릭스를 한 줄에 표시
+            metrics_text = (
+                f"CPU 사용률: **{system_metrics['cpu_usage']}** &nbsp;&nbsp;&nbsp;&nbsp;"
+                f"메모리 사용률: **{system_metrics['memory_usage']}** &nbsp;&nbsp;&nbsp;&nbsp;"
+                f"디스크 사용률: **{system_metrics['disk_usage']}** &nbsp;&nbsp;&nbsp;&nbsp;"
+                f"네트워크 Input: **{system_metrics['network_input_kb']}** &nbsp;&nbsp;&nbsp;&nbsp;"
+                f"네트워크 Output: **{system_metrics['network_output_kb']}**"
+            )
+            st.markdown(metrics_text, unsafe_allow_html=True)
+
+            # 총 메모리, 사용 중, 사용 가능 메모리 표시
+            memory_details_text = (
+                f"총 메모리: **{system_metrics['total_memory_gb']}**, "
+                f"사용 중: **{system_metrics['used_memory_gb']}**, "
+                f"사용 가능: **{system_metrics['available_memory_gb']}**"
+            )
+            st.markdown(memory_details_text, unsafe_allow_html=True) # bold 적용을 위해 unsafe_allow_html=True 사용
+
+            # --- 4. CPU/Memory 사용률 상위 프로세스 (Top 5) ---
+            st.markdown("### 상위 프로세스")
+            top_cpu_df, top_mem_df = get_top_processes() # 실제 psutil 데이터 사용
+
+            # 화면을 두 열로 나누어 평행하게 표시
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.markdown("#### CPU 사용률 상위 프로세스 (Top 5)")
+                if not top_cpu_df.empty:
+                    st.dataframe(top_cpu_df, use_container_width=True)
+                else:
+                     st.info("CPU 사용률 상위 프로세스 데이터를 가져오지 못했습니다.")
+
+            with col2:
+                st.markdown("#### Memory 사용률 상위 프로세스 (Top 5)")
+                if not top_mem_df.empty:
+                     st.dataframe(top_mem_df, use_container_width=True)
+                else:
+                     st.info("Memory 사용률 상위 프로세스 데이터를 가져오지 못했습니다.")
+
+            # 데이터베이스 연결 닫기
+            conn.close()
+        else:
+            # DB 연결 실패 시 메시지는 이미 get_oracle_connection에서 출력됨
             pass
-        except Exception as e:
-             # st.warning(f"프로세스 정보 가져오기 오류: {e}") # 운영 시 메시지 숨김
-             pass # 오류 발생 시 무시
 
-
-    # CPU 사용률 기준 정렬 (None 값 필터링 및 처리)
-    top_cpu_processes = sorted(
-        [p for p in processes if p.get('cpu_percent') is not None],
-        key=lambda x: x['cpu_percent'], reverse=True
-    )[:num]
-    # Memory 사용률 기준 정렬 (None 값 필터링 및 처리)
-    top_memory_processes = sorted(
-         [p for p in processes if p.get('memory_percent') is not None],
-        key=lambda x: x['memory_percent'], reverse=True
-    )[:num]
-
-    # 데이터프레임으로 변환
-    df_top_cpu = pd.DataFrame(top_cpu_processes)
-    df_top_memory = pd.DataFrame(top_memory_processes)
-
-    # 컬럼 이름 변경
-    if not df_top_cpu.empty:
-        df_top_cpu.columns = ['PID', '프로세스 이름', 'CPU (%)', '메모리 (%)']
-    else: # 데이터가 없을 경우 빈 컬럼으로 데이터프레임 생성 (표 헤더 표시 위함)
-        df_top_cpu = pd.DataFrame(columns=['PID', '프로세스 이름', 'CPU (%)', '메모리 (%)'])
-
-    if not df_top_memory.empty:
-        df_top_memory.columns = ['PID', '프로세스 이름', 'CPU (%)', '메모리 (%)']
-    else: # 데이터가 없을 경우 빈 컬럼으로 데이터프레임 생성
-        df_top_memory = pd.DataFrame(columns=['PID', '프로세스 이름', 'CPU (%)', '메모리 (%)'])
-
-
-    return df_top_cpu, df_top_memory
-
-# ✨ 대시보드 그리기 함수
-def draw_dashboard(df_for_chart, df_task_list, system_metrics, df_top_cpu, df_top_memory):
-    # 대시보드 제목 제거 요청에 따라 st.title 제거
-
-    st.markdown("## 시간대별 스케줄 현황")
-
-    # df_for_chart가 비어있지 않고 유효한 데이터가 있는지 확인
-    if not df_for_chart.empty:
-         # Altair 차트 생성
-        chart = alt.Chart(df_for_chart).mark_line(point=True).encode(
-            x=alt.X('hourly', axis=alt.Axis(title='시간대', format='%m-%d %H:%M')), # 시간대 축
-            y=alt.Y('count', title='스케줄 건수'), # 건수 축
-            color=alt.Color('task_status', title='상태',
-                            # 보색에 가까운 색상 스케일 지정
-                            scale=alt.Scale(domain=list(df_for_chart['task_status'].unique()),
-                                            range=['#ffcc00', '#03dac6', '#cf6679', '#6200ee', '#bb86fc', '#ffffff'] # TOTAL 라인 색상 추가 (흰색)
-                                           )),
-            tooltip=['hourly', 'task_status', 'count'] # 마우스 오버 시 정보 표시
-        ).properties(
-            title='시간대별 상태별 스케줄 건수 및 총합',
-        ).interactive() # 확대/축소 가능하게 설정
-
-        st.altair_chart(chart, use_container_width=True) # 화면 폭에 맞춰 표시
-
-    else:
-        st.info("지난 12시간 및 향후 12시간 내 스케줄 데이터가 없거나 가져오지 못했습니다.")
-
-
-    st.markdown("## 스케줄 등록 현황")
-    if df_task_list is not None and not df_task_list.empty:
-        # 컬럼 이름 보기 좋게 변경 (선택 사항)
-        df_task_list.columns = ['Task ID', '시작 시간', 'Task 이름', '상태']
-        # 시작 시간 포맷 변경 (datetime 객체인 경우)
-        if pd.api.types.is_datetime64_any_dtype(df_task_list['시작 시간']):
-             df_task_list['시작 시간'] = df_task_list['시작 시간'].dt.strftime('%Y-%m-%d %H:%M:%S')
-
-        # 표 표시 및 10건 초과 시 스크롤바 자동 생성 (height로 조절)
-        st.dataframe(df_task_list, height=400, use_container_width=True) # use_container_width=True로 폭 맞춤
-    elif df_task_list is not None and df_task_list.empty:
-        st.info("스케줄 목록 데이터가 없습니다.")
-    else:
-        st.warning("스케줄 목록 데이터를 가져오지 못했습니다.")
-
-    st.markdown("## 시스템 메트릭스")
-    if system_metrics:
-        # 시스템 메트릭스를 한 줄에 표시
-        st.markdown(
-            f"""
-            <div class="metric-container">
-                <div class="metric-item">
-                    <div class="metric-label">CPU 사용률</div>
-                    <div class="metric-value">{system_metrics.get('cpu_percent', 'N/A'):.1f}%</div>
-                </div>
-                <div class="metric-item">
-                    <div class="metric-label">메모리 사용률</div>
-                    <div class="metric-value">{system_metrics.get('memory_percent', 'N/A'):.1f}%</div>
-                </div>
-                <div class="metric-item">
-                    <div class="metric-label">디스크 사용률</div>
-                    <div class="metric-value">{system_metrics.get('disk_percent', 'N/A'):.1f}%</div>
-                </div>
-                <div class="metric-item">
-                    <div class="metric-label">네트워크 Input</div>
-                    <div class="metric-value">{system_metrics.get('net_input_kb', 'N/A'):.2f} KB</div>
-                </div>
-                 <div class="metric-item">
-                    <div class="metric-label">네트워크 Output</div>
-                    <div class="metric-value">{system_metrics.get('net_output_kb', 'N/A'):.2f} KB</div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True
-        )
-
-        # 메모리 상세 정보를 한 줄에 표시
-        st.markdown(
-             f"""
-            <div class="memory-details-container">
-                 <div class="memory-item">총 메모리: <strong>{system_metrics.get('total_memory_gb', 'N/A'):.2f} GB</strong></div>
-                 <div class="memory-item">사용 중: <strong>{system_metrics.get('used_memory_gb', 'N/A'):.2f} GB</strong></div>
-                 <div class="memory-item">사용 가능: <strong>{system_metrics.get('available_memory_gb', 'N/A'):.2f} GB</strong></div>
-            </div>
-             """, unsafe_allow_html=True
-        )
-
-
-    st.markdown("## 상위 프로세스")
-    # CPU 사용률 상위 5개, Memory 사용률 상위 5개 프로세스를 평행하게 표시
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.markdown("### CPU 사용률 상위 프로세스 (Top 5)")
-        if not df_top_cpu.empty: # 데이터프레임이 비어있지 않을 때만 표시
-            st.dataframe(df_top_cpu, height=250, use_container_width=True) # 적당한 높이 지정, 폭 맞춤
-        else:
-            st.info("CPU 사용률 상위 프로세스 정보를 가져오지 못했거나 표시할 프로세스가 없습니다.")
-
-    with col2:
-        st.markdown("### Memory 사용률 상위 프로세스 (Top 5)")
-        if not df_top_memory.empty: # 데이터프레임이 비어있지 않을 때만 표시
-            st.dataframe(df_top_memory, height=250, use_container_width=True) # 적당한 높이 지정, 폭 맞춤
-        else:
-             st.info("메모리 사용률 상위 프로세스 정보를 가져오지 못했거나 표시할 프로세스가 없습니다.")
-
-
-# ✨ 메인 실행 부분
-if __name__ == "__main__":
-    # 데이터 가져오기 (세 번째 쿼리 결과도 함께 가져옴)
-    df_for_chart, df_task_list, db_error = fetch_data(conn)
-
-    # DB 연결 또는 쿼리 오류 메시지가 있다면 표시
-    if db_error:
-        # fetch_data 함수 안에서 이미 에러를 표시했지만, 혹시 모를 상황 대비
-        # st.error(f"데이터 로드 중 오류 발생: {db_error}")
-        pass # 이미 함수 안에서 표시하므로 여기서 다시 표시할 필요 없음
-
-    # 시스템 메트릭스 가져오기
-    system_metrics = get_system_metrics()
-
-    # 상위 프로세스 가져오기
-    df_top_cpu, df_top_memory = get_top_processes() # 캐싱 데코레이터 적용됨
-
-    # 대시보드 그리기 (데이터가 성공적으로 로드되었을 때만 시각화)
-    # fetch_data에서 오류가 나더라도 None이 반환되므로 draw_dashboard 함수 안에서 처리하도록 함.
-    draw_dashboard(df_for_chart, df_task_list, system_metrics, df_top_cpu, df_top_memory)
-
-    # @st.cache_resource를 사용했기 때문에 여기서 conn.close()를 명시적으로 호출할 필요는 없어.
-    # 스트림릿 세션이 종료될 때 자동으로 처리될 가능성이 높아.
+    # 3초 대기 후 다시 실행 (rerun)
+    time.sleep(3)
+    st.rerun() # Streamlit 앱을 처음부터 다시 실행하여 화면 업데이트
