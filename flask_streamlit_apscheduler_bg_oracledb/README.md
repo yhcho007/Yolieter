@@ -29,7 +29,7 @@ dash_app.py는 처음에는 streamlit를 이용했으나, Dash 가 더 가독성
 
 #### 사용법
 ```bash
-python dash_app.py
+streamlit run dash_app.py
 ```
 브라우저에서 애플리케이션 보기:
 애플리케이션이 실행되면 브라우저를 열고 http://127.0.0.1:8050로 이동하여 Dash 애플리케이션을 확인합니다.
