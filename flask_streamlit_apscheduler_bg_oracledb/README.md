@@ -1,7 +1,5 @@
 # Task Management System
 
-이 프로젝트는 Oracle 데이터베이스와 통신하여 작업을 관리하는 API를 제공합니다. Flask를 사용하여 RESTful API를 구현하고, Streamlit을 통해 사용자 인터페이스를 제공합니다. 또한, 백그라운드 작업을 처리하기 위해 `sch.py` 스크립트를 사용합니다.
-
 ## 구성 요소
 
 ### 1. main.py
