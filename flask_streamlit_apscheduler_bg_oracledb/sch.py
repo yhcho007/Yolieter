@@ -1,8 +1,9 @@
-import schedule  # schedule 라이브러리 가져오기
-import time      # time 모듈 가져오기 (sleep 함수 사용)
+import schedule
+import time
 import sys
 import pandas as pd
 import subprocess
+import threading
 from datetime import datetime
 from common.loghandler import LogHandler
 from common.dbhandler import DBHandler
@@ -13,90 +14,155 @@ logger = log_handler.getloghandler("sch")
 db_handler = DBHandler()
 dbconn = db_handler.get_db_connection(logger)
 
-# 데이터베이스에서 작업을 가져오는 함수
+# Set to track active task threads by task_id
+active_task_threads = set()
+# Lock for thread-safe access to active_task_threads
+thread_lock = threading.Lock()
+
+
 def fetch_tasks():
     global dbconn
-    query = "SELECT taskid, taskname, subprocee_starttime, task_status FROM TESTCHO.TASK WHERE task_status != 'S'"
-    # Oracle DATE/TIMESTAMP 컬럼을 datetime 객체로 가져오는지 확인 필요 (oracledb 기본 동작 확인)
-    return pd.read_sql(query, dbconn)
+    # Select tasks ready to run (status 'R') and whose start time is now or in the past
+    query = ("SELECT taskid, taskname, subprocee_starttime, task_status FROM TESTCHO.TASK WHERE task_status = 'R' "
+             "AND subprocee_starttime <= SYSDATE")
+    try:
+        tasks_df = pd.read_sql(query, dbconn)
+        return tasks_df
+    except Exception as e:
+        logger.error(f"fetch_tasks query failed: {e}", exc_info=True)
+        return pd.DataFrame()
 
-# 작업 상태를 업데이트하는 함수
+
 def update_task_status(taskid, status):
     global dbconn
-    with dbconn.cursor() as cursor:
-        cursor.execute("""
-            UPDATE TESTCHO.TASK
-            SET task_status = :status,
-                changed_at = CURRENT_TIMESTAMP
-            WHERE taskid = :taskid
-        """, status=status, taskid=taskid)
-        dbconn.commit()
-
-# app.py 스크립트를 subprocess로 실행하는 함수
-def run_app_py(taskid):
-    """Run the app.py script with taskid as an argument."""
-    taskid_str = str(taskid)
-    logger.info(f"app.py 실행 시도: taskid={taskid_str}")
-    process = subprocess.Popen(["python", "app.py", taskid_str],
-                            start_new_session=True, # 새 세션에서 실행하여 부모 프로세스와 분리
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE)
-    logger.info(f"app.py 프로세스 시작 PID: {process.pid}")
-    return process
-
-# 데이터베이스에서 작업을 확인하고 필요한 작업을 실행하는 함수
-# 이 함수가 스케줄러에 의해 주기적으로 호출될 거예요.
-def check_and_run_tasks():
     try:
-        current_time = datetime.now() # datetime 객체로 현재 시간을 가져와 비교하는 게 더 정확해요.
-        current_time_str = current_time.strftime("%Y-%m-%d %H:%M:%S")
-        logger.info(f"{current_time_str}|작업 확인 시작...")
+        with dbconn.cursor() as cursor:
+            cursor.execute("""
+                UPDATE TESTCHO.TASK
+                SET task_status = :status,
+                    changed_at = CURRENT_TIMESTAMP
+                WHERE taskid = :taskid
+            """, status=status, taskid=taskid)
+            dbconn.commit()
+            logger.info(f"taskid={taskid} status updated to '{status}'")
+    except Exception as e:
+        logger.error(f"Failed to update status for taskid={taskid}: {e}", exc_info=True)
 
-        tasks = fetch_tasks()
-        logger.info(f"{current_time_str}|확인된 작업 목록: {len(tasks)}개")
-        logger.debug(f"{current_time_str}|확인된 작업 데이터:\n{tasks}")
 
-        for index, row in tasks.iterrows():
-            logger.debug(f"row({index}):{row}")
-            if isinstance(row['subprocee_starttime'], datetime) and row['subprocee_starttime'] >= current_time:
-                task_id = row['taskid']
-                logger.info(f"조건 만족 작업 발견: taskid={task_id}, 시작 시간={row['subprocee_starttime']}")
-                # 작업 상태를 'I' (In progress)로 업데이트
-                update_task_status(task_id, 'I')
-                logger.info(f"taskid={task_id} 상태 'I'로 업데이트 완료")
+def run_app_py(taskid):
+    """Run the app.py script with taskid as argument."""
+    try:
+        taskid_str = str(taskid)
+        logger.info(f"Attempting to run app.py for taskid={taskid_str}")
 
-                # app.py 실행
-                process = run_app_py(task_id)
+        process = subprocess.Popen(["python", "app.py", taskid_str],
+                                   start_new_session=True,  # Run in new session to detach
+                                   stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE)
 
-            elif not isinstance(row['subprocee_starttime'], datetime):
-                logger.warning(
-                    f"taskid={row['taskid']}의 subprocee_starttime 형식이 datetime이 아닙니다: {type(row['subprocee_starttime'])}")
+        logger.info(f"app.py process started with PID: {process.pid} (taskid={taskid})")
+        return process
+
+    except FileNotFoundError:
+        logger.error(f"Error: app.py script not found. (taskid={taskid})", exc_info=True)
+    except Exception as e:
+        logger.error(f"run_app_py failed for taskid={taskid}: {e}", exc_info=True)
+    return None
+
+
+def task_worker(task_data):
+    """Thread worker function to process a single task."""
+
+    task_id = task_data['TASKID']
+    start_time = task_data['SUBPROCEE_STARTTIME']
+
+    logger.info(f"Thread for taskid={task_id} started. Scheduled time: {start_time}")
+
+    try:
+        now = datetime.now()
+        if now < start_time:
+            wait_seconds = (start_time - now).total_seconds()
+            if wait_seconds > 0:
+                logger.info(f"taskid={task_id} waiting for {wait_seconds:.2f} seconds...")
+                time.sleep(wait_seconds)
+                logger.info(f"taskid={task_id} wait complete.")
+
+        logger.info(f"taskid={task_id} execution time reached or passed. Preparing to run.")
+
+        # Update status to 'In progress'
+        update_task_status(task_id, 'I')
+
+        # Run the subprocess
+        process = run_app_py(task_id)
+
+        if process:
+            logger.info(f"app.py execution started for taskid={task_id}. PID: {process.pid}")
+        else:
+            logger.error(f"app.py execution failed to start for taskid={task_id}.")
 
     except Exception as e:
-        logger.error(f"작업 확인 및 실행 중 에러 발생: {e}", exc_info=True)
-        # 에러 발생 시 DB 연결이 끊어졌을 수 있으니, 다음 실행 때 재연결될 거예요.
+        logger.error(f"Error processing taskid={task_id}: {e}", exc_info=True)
+    finally:
+        # Remove task_id from active set upon thread completion
+        with thread_lock:
+            if task_id in active_task_threads:
+                active_task_threads.remove(task_id)
+                logger.info(f"taskid={task_id} removed from active set.")
+
+        logger.info(f"Thread for taskid={task_id} finished.")
+
+
+def check_and_run_tasks():
+    """Fetches ready tasks and starts a thread for each."""
+    try:
+        tasks = fetch_tasks()
+
+        if not tasks.empty:
+            for index, row in tasks.iterrows():
+                task_id = row['TASKID']
+
+                with thread_lock:
+                    if task_id not in active_task_threads:
+                        thread = threading.Thread(target=task_worker, args=(row,))
+                        thread.daemon = True  # Allow main thread to exit even if this thread is running
+                        thread.start()
+                        active_task_threads.add(task_id)
+                        logger.info(f"Started new thread for taskid={task_id}.")
+
+        # Log the number of tasks currently being handled by threads
+        with thread_lock:
+            logger.info(f"===== Number of active task threads: {len(active_task_threads)} =====")
+
+    except Exception as e:
+        logger.error(f"Error in check_and_run_tasks: {e}", exc_info=True)
 
 
 def main():
-    logger.info("sch scheduler (schedule 라이브러리 사용) 서버 시작 중...")
+    logger.info("sch scheduler (using schedule library) starting...")
 
-    # schedule 라이브러리를 사용하여 check_and_run_tasks 함수를 1초마다 실행하도록 예약
-    # APScheduler의 add_job 대신 이 문법을 사용해요.
-    schedule.every(1).seconds.do(check_and_run_tasks)
+    # Schedule check_and_run_tasks to run every 5 seconds
+    schedule.every(5).seconds.do(check_and_run_tasks)
 
-    logger.info('스케줄러 시작! (schedule 라이브러리 사용 중)')
-    logger.info('Ctrl+C 를 누르면 종료돼요.')
+    logger.info('Scheduler started!')
+    logger.info('Press Ctrl+C to exit.')
 
-    # schedule 라이브러리는 run_pending()을 계속 호출해줘야 예약된 작업을 실행해요.
+    # Keep the main thread alive to run the scheduler
     try:
         while True:
-            schedule.run_pending() # 예약된 작업 중에 실행할 게 있으면 실행
-            time.sleep(1)         # 너무 바쁘게 돌지 않도록 1초 쉬기
+            schedule.run_pending()
+            time.sleep(1)  # Check schedule every 1 second
 
     except (KeyboardInterrupt, SystemExit):
-        # Ctrl+C 등으로 프로그램을 종료할 때
-        logger.info("스케줄러 종료 중...")
-        logger.info('스케줄러 종료.')
+        logger.info("Scheduler shutting down...")
+        logger.info('Scheduler stopped.')
+    finally:
+        if dbconn:
+            try:
+                dbconn.close()
+                logger.info("Database connection closed.")
+            except Exception as e:
+                logger.error(f"Error closing DB connection: {e}", exc_info=True)
+
 
 if __name__ == "__main__":
     main()
