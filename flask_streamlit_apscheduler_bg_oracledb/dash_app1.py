@@ -1,665 +1,789 @@
-# 필요한 라이브러리 임포트
 import streamlit as st
 import oracledb
-import pandas as pd
-import plotly.express as px
 import psutil
-import time
+import pandas as pd
+import time # time.sleep 사용을 위해 import 유지
 import datetime
-import sys
+import plotly.graph_objects as go
+import plotly.express as px
 from common.dbhandler import DBHandler
 from common.loghandler import LogHandler
 
-# 업데이트 주기 (초)
-METRICS_UPDATE_INTERVAL = 3 # 시스템 메트릭스, CPU/Memory Top5 업데이트 주기
-GRAPH_UPDATE_INTERVAL = 60  # 스케줄 현황 그래프/테이블 업데이트 주기
-# Clock은 모든 업데이트 시 함께 업데이트됩니다.
 
-# 색상 설정
-COLOR_MAP = {
-    "R": "gray",   # 대기상태
-    "X": "blue",  # 실행중
-    "S": "green", # 완료종료
-    "F": "yellow", # Fail종료
-    "K": "red"   # 강제종료
-}
+# --- Streamlit 페이지 설정 (가장 먼저 호출해야 함!) ---
+st.set_page_config(layout="wide") # 화면 전체 폭 사용
+
 log_handler = LogHandler()
 logger = log_handler.getloghandler("main")
-
 db_handler = DBHandler()
 db_config = db_handler.get_db_config()
 
-# --- Oracle DB 연결 함수 ---
-def get_oracle_connection():
+
+# --- 상태별 색상 매핑 ---
+STATUS_COLORS = {
+    "R": "grey",    # 대기상태
+    "X": "blue",    # 실행중
+    "S": "green",   # 완료종료
+    "F": "orange",  # Fail종료 (노랑색에 가까운 주황)
+    "K": "red"      # 강제종료
+}
+
+# --- CSS 스타일 Injection (페이지 설정 이후에 와야 함!) ---
+st.markdown("""
+<style>
+/* 전체 배경 검은색 및 기본 글자색 흰색 */
+body {
+    background-color: black !important;
+    color: white !important; /* 기본 글자색 흰색 */
+}
+html {
+    background-color: black !important; /* HTML 요소 배경도 검은색으로 */
+}
+
+/* Streamlit 앱 컨테이너 배경색 투명 */
+.stApp {
+    background-color: transparent !important;
+    color: white !important; /* 앱 내부 기본 글자색 흰색 */
+}
+
+/* Streamlit 요소의 기본 배경색 제거 (컨테이너, 컬럼 등) */
+/* 특정 블록 요소들의 배경 투명 설정 */
+.stVerticalBlock, .stHorizontalBlock, .stColumns, [data-testid="stVerticalBlock"], [data-testid="stHorizontalBlock"], [data-testid="stColumns"] {
+    background-color: transparent !important;
+}
+
+/* 일반 텍스트 및 마크다운 텍스트 색상 */
+/* p 태그, div, span 등 대부분의 텍스트 요소 */
+/* Streamlit이 텍스트를 감싸는 다양한 요소에 적용 */
+p, div, span, .stMarkdown, .stText {
+     color: white !important;
+}
+
+
+/* 타이틀 노란색 */
+h1, h2, h3, h4, h5, h6 {
+    color: yellow !important;
+}
+
+
+/* 그래프와 테이블 영역 배경 흰색, 글자 검은색 */
+/* Graph와 DataFrame/Table 컨테이너에 적용 */
+.stPlotlyChart, .stDataFrame, .stTable, [data-testid="stTable"], [data-testid="stDataFrame"], [data-testid="stPlotlyChart"] {
+    background-color: white !important;
+    color: black !important; /* 기본 글자색 검은색 */
+    padding: 10px; /* 여백 추가 */
+    border-radius: 5px; /* 모서리 둥글게 */
+    margin-bottom: 10px; /* 아래 여백 추가 */
+}
+
+/* 테이블 테두리 검은색 */
+.stDataFrame table, .stTable table, [data-testid="stTable"] table, [data-testid="stDataFrame"] table {
+    border: 1px solid black !important;
+}
+.stDataFrame th, .stDataFrame td, .stTable th, .stTable td, [data-testid="stTable"] th, [data-testid="stTable"] td, [data-testid="stDataFrame"] th, [data-testid="stDataFrame"] td {
+    border: 1px solid black !important;
+    color: black !important; /* 테이블 안 글자색 검은색 강제 */
+}
+
+/* 위젯 레이블(글자) 색상 노란색으로 변경 */
+[data-testid="stWidgetLabel"] label { /* label 태그에 직접 적용 */
+    color: yellow !important;
+}
+
+/* 위젯 자체 (입력 필드, 드롭다운 등)의 배경색 및 글자색 */
+/* 위젯의 실제 입력/표시 영역에 대한 스타일을 명확히 지정 */
+
+/* Text Input, Date Input, Time Input, Textarea */
+/* data-baseweb 속성 및 input/textarea 태그 자체에 접근 */
+[data-baseweb="input"] input[type="text"],
+[data-baseweb="datepicker"] input[type="text"],
+[data-baseweb="timepicker"] input[type="text"],
+[data-baseweb="textarea"] textarea
+{
+    color: black !important; /* 입력된 글자색 검은색 */
+    background-color: white !important; /* 배경 흰색 */
+    -webkit-text-fill-color: black !important; /* 웹킷 기반 브라우저에서 자동 완성 시 글자색 유지 */
+    opacity: 1 !important; /* 투명도 강제 (일부 상태에서 흐려지는 것 방지) */
+}
+
+/* Selectbox 및 Multiselect - 현재 선택된 값이 표시되는 영역 (버튼처럼 보이는 부분) */
+[data-baseweb="select"] > div:first-child,
+[data-baseweb="combobox"] > div:first-child
+{
+    color: black !important; /* 선택된 글자색 검은색 */
+    background-color: white !important; /* 배경 흰색 */
+    opacity: 1 !important; /* 투명도 강제 */
+}
+/* Selectbox 및 Multiselect - 현재 선택된 값이 표시되는 영역 내부의 텍스트 요소 */
+[data-baseweb="select"] > div:first-child span,
+[data-baseweb="combobox"] > div:first-child span,
+[data-baseweb="select"] [role="button"] > div, /* selected option text div */
+[data-baseweb="combobox"] [role="button"] > div /* selected option text div */
+{
+     color: black !important; /* 텍스트 색상 검은색 */
+     opacity: 1 !important; /* 투명도 강제 */
+}
+
+
+/* Selectbox 및 Multiselect 드롭다운 메뉴 */
+div[data-baseweb="popover"] div[data-baseweb="menu"] ul,
+div[data-baseweb="popover"] div[role="listbox"] /* selectbox, multiselect 드롭다운 목록 컨테이너 */
+{
+    background-color: white !important; /* 드롭다운 메뉴 배경 흰색 */
+    color: black !important; /* 드롭다운 메뉴 글자색 검은색 */
+}
+/* Selectbox 및 Multiselect 드롭다운 메뉴 항목 */
+div[role="option"]
+{
+     color: black !important; /* 드롭다운 메뉴 항목 글자색 검은색 */
+     background-color: white !important; /* 드롭다운 메뉴 항목 배경 흰색 */
+}
+
+
+/* Selectbox 및 Multiselect 항목 호버 시 배경색 */
+div[role="option"]:hover
+{
+    background-color: #eee !important; /* 연한 회색 배경 */
+    color: black !important;
+}
+
+/* Selectbox 및 Multiselect 선택된 항목 배경색 */
+div[role="option"][aria-selected="true"]
+{
+     background-color: lightblue !important; /* 선택된 항목 배경색 */
+     color: black !important;
+}
+
+/* Date Input 캘린더 팝업 */
+div[data-baseweb="calendar"] div[data-baseweb="popover"] {
+    background-color: white !important; /* 캘린더 팝업 배경 */
+    color: black !important; /* 캘린더 글자색 */
+}
+
+
+/* 멀티셀렉트에서 선택된 태그 스타일 */
+div[data-baseweb="tag"] {
+    background-color: lightgrey !important; /* 선택된 태그 배경색 */
+    color: black !important; /* 선택된 태그 글자색 */
+    opacity: 1 !important; /* 투명도 강제 */
+}
+div[data-baseweb="tag"] > span {
+     color: black !important; /* 선택된 태그 안의 텍스트 글자색 */
+     opacity: 1 !important; /* 투명도 강제 */
+}
+
+
+/* "-" 문자 레이블 색상 (별도 마크다운으로 처리) 및 위치 조정 */
+.yellow-text {
+    color: yellow !important;
+    display: inline-block; /* vertical-align 적용을 위해 필요 */
+    vertical-align: middle; /* 세로 중앙 정렬 시도 */
+    /* 위젯의 높이 및 레이블 위치에 따라 미세 조정 필요 */
+    margin-top: 1.8em; # Adjust margin top based on visual test (starts around 1.5em, need lower)
+    text-align: center; /* 컬럼 내에서 중앙 정렬 */
+    width: 100%; /* 컬럼 폭 전체 사용 */
+}
+
+/* 스피너 숨기기 */
+[data-testid="stSpinner"] {
+    display: none !important;
+}
+
+/* Streamlit 기본 메시지 컨테이너 숨기기 (예: 에러 메시지 등, 주의하여 사용) */
+/* 필요하다면 주석 해제하여 테스트 */
+/* [data-testid="stNotification"] {
+    display: none !important;
+} */
+
+
+</style>
+""", unsafe_allow_html=True)
+
+# --- Session State 초기화 ---
+if 'last_schedule_update_time' not in st.session_state:
+    st.session_state['last_schedule_update_time'] = datetime.datetime.min
+if 'last_system_update_time' not in st.session_state:
+    st.session_state['last_system_update_time'] = datetime.datetime.min
+
+# 데이터 저장용 Session State 초기화
+if 'schedule_graph_data' not in st.session_state:
+    st.session_state['schedule_graph_data'] = pd.DataFrame()
+if 'schedule_table_data' not in st.session_state:
+    st.session_state['schedule_table_data'] = pd.DataFrame()
+if 'status_count_data' not in st.session_state: # 상태별 카운트 데이터는 table_df에서 계산
+     st.session_state['status_count_data'] = pd.DataFrame(columns=['상태', '건수']) # 빈 데이터프레임으로 컬럼과 함께 초기화
+if 'system_metrics_data' not in st.session_state:
+    st.session_state['system_metrics_data'] = {}
+if 'cpu_top5_data' not in st.session_state:
+    st.session_state['cpu_top5_data'] = []
+if 'memory_top5_data' not in st.session_state:
+    st.session_state['memory_top5_data'] = []
+
+
+# 위젯 상태 저장용 Session State 초기화
+if 'schedule_status_filter' not in st.session_state:
+    st.session_state['schedule_status_filter'] = list(STATUS_COLORS.keys())
+if 'graph_type' not in st.session_state:
+    st.session_state['graph_type'] = '꺽은선'
+if 'start_date' not in st.session_state:
+    st.session_state['start_date'] = datetime.date.today() - datetime.timedelta(days=1)
+if 'start_time' not in st.session_state:
+     st.session_state['start_time'] = datetime.time(0, 0)
+if 'end_date' not in st.session_state:
+    st.session_state['end_date'] = datetime.date.today() + datetime.timedelta(days=1)
+if 'end_time' not in st.session_state:
+    st.session_state['end_time'] = datetime.time(0, 0)
+if 'auto_update' not in st.session_state:
+    st.session_state['auto_update'] = 'OFF'
+
+
+# --- Oracle DB 데이터 가져오기 함수 ---
+def get_db_connection():
+    """Oracle DB 연결을 반환합니다."""
+    conn = None
     try:
-        # Streamlit secrets에서 연결 정보 가져오기
-        conn = oracledb.connect(
-            user=db_config['user'], password=db_config['password'], dsn=db_config['dsn']
-        )
+        conn = oracledb.connect(f"{db_config['user']}/{db_config['password']}@{db_config['dsn']}")
         return conn
     except Exception as e:
-        st.error(f"데이터베이스 연결 오류: {e}")
+        # print(f"데이터베이스 연결 오류: {e}") # print 문 제거
         return None
 
-# 데이터 가져오는 함수 (그래프용 - 쿼리 1)
-def fetch_graph_data(conn, selected_statuses, start_time, end_time):
-    if conn is None:
-        return pd.DataFrame()
+# show_spinner=False 추가하여 캐시 로드/업데이트 시 스피너 숨김
+@st.cache_data(ttl=60, show_spinner=False) # 1분(60초) 동안 캐싱, 스피너 숨김
+def fetch_schedule_data_cached(status_filter, start_dt, end_dt):
+    """스케줄 현황 그래프 및 테이블 데이터를 Oracle DB에서 가져옵니다."""
+    conn = get_db_connection()
+    if not conn:
+        # print("데이터베이스 연결 실패, 스케줄 데이터 가져오기 중단") # print 문 제거
+        return pd.DataFrame(), pd.DataFrame() # 빈 데이터프레임 반환
 
-    status_filter = ""
-    if selected_statuses:
-        # Oracle DB는 tuple 형태의 IN 절을 지원
-        status_filter = f"AND task_status IN ({', '.join([f"'{s}'" for s in selected_statuses])})"
+    # 상태 필터 조건 생성
+    status_condition = ""
+    if status_filter:
+        status_list_str = ', '.join(f"'{s}'" for s in status_filter)
+        status_condition = f"AND task_status IN ({status_list_str})"
 
-    # datetime 객체를 Oracle TIMESTAMP로 변환하여 쿼리에 사용
-    try:
-        start_ts = start_time.strftime('%Y-%m-%d %H:%M:%S')
-        end_ts = end_time.strftime('%Y-%m-%d %H:%M:%S')
-    except AttributeError: # 날짜 선택 위젯 초기 상태 처리 (None일 수 있음)
-         st.warning("날짜/시간 선택을 완료해주세요.")
-         return pd.DataFrame()
+    # 시간 범위 조건 및 쿼리 문자열 생성 (바인드 변수 사용)
+    start_datetime_str = start_dt.strftime('%Y-%m-%d %H:%M:%S')
+    end_datetime_str = end_dt.strftime('%Y-%m-%d %H:%M:%S')
 
-
-    query = f"""
-    SELECT TO_CHAR(subprocee_starttime,'YYYY-MM-DD HH24') AS hourly, TASK_STATUS, COUNT(TASK_STATUS) as cnt_status
+    # 쿼리 1: 시간대별 상태 카운트 (그래프용)
+    query1 = f"""
+    SELECT TO_CHAR(subprocee_starttime,'YYYY-MM-DD HH24') AS hourly,
+           TASK_STATUS, COUNT(TASK_STATUS) as cnt_status
     FROM task
-    WHERE subprocee_starttime BETWEEN TO_TIMESTAMP(:start_ts_str, 'YYYY-MM-DD HH24:MI:SS') AND TO_TIMESTAMP(:end_ts_str, 'YYYY-MM-DD HH24:MI:SS')
-    {status_filter}
-    GROUP BY TO_CHAR(subprocee_starttime,'YYYY-MM-DD HH24'), TASK_STATUS
-    ORDER BY TO_CHAR(subprocee_starttime,'YYYY-MM-DD HH24')
+    WHERE subprocee_starttime BETWEEN TO_TIMESTAMP(:start_time_str, 'YYYY-MM-DD HH24:MI:SS') AND TO_TIMESTAMP(:end_time_str, 'YYYY-MM-DD HH24:MI:SS')
+    {status_condition}
+    GROUP BY TO_CHAR(subprocee_starttime,'YYYY-MM-DD HH24'), TASK_STATUS ORDER BY TO_CHAR(subprocee_starttime,'YYYY-MM-DD HH24')
     """
-    try:
-        # 바인드 변수 사용
-        params = {'start_ts_str': start_ts, 'end_ts_str': end_ts}
-        df = pd.read_sql(query, conn, params=params)
-        return df
-    except Exception as e:
-        st.error(f"그래프 데이터를 가져오는 중 오류 발생: {e}")
-        return pd.DataFrame()
-
-# 데이터 가져오는 함수 (테이블용 - 쿼리 2)
-def fetch_table_data(conn, selected_statuses, start_time, end_time):
-    if conn is None:
-        return pd.DataFrame()
-
-    status_filter = ""
-    if selected_statuses:
-        status_filter = f"AND task_status IN ({', '.join([f"'{s}'" for s in selected_statuses])})"
-
-    try:
-        start_ts = start_time.strftime('%Y-%m-%d %H:%M:%S')
-        end_ts = end_time.strftime('%Y-%m-%d %H:%M:%S')
-    except AttributeError:
-        st.warning("날짜/시간 선택을 완료해주세요.")
-        return pd.DataFrame()
+    params1 = {'start_time_str': start_datetime_str, 'end_time_str': end_datetime_str}
 
 
-    query = f"""
+    # 쿼리 2: 개별 스케줄 목록 (테이블/카운트 테이블용)
+    query2 = f"""
     SELECT subprocee_starttime, taskname, task_status
     FROM task
-    WHERE subprocee_starttime BETWEEN TO_TIMESTAMP(:start_ts_str, 'YYYY-MM-DD HH24:MI:SS') AND TO_TIMESTAMP(:end_ts_str, 'YYYY-MM-DD HH24:MI:SS')
-    {status_filter}
+    WHERE subprocee_starttime BETWEEN TO_TIMESTAMP(:start_time_str, 'YYYY-MM-DD HH24:MI:SS') AND TO_TIMESTAMP(:end_time_str, 'YYYY-MM-DD HH24:MI:SS')
+    {status_condition}
     ORDER BY subprocee_starttime DESC
     """
+    params2 = {'start_time_str': start_datetime_str, 'end_time_str': end_datetime_str}
+
+
+    graph_df = pd.DataFrame()
+    table_df = pd.DataFrame()
+
     try:
-        # 바인드 변수 사용
-        params = {'start_ts_str': start_ts, 'end_ts_str': end_ts}
-        df = pd.read_sql(query, conn, params=params)
-        return df
+        cursor = conn.cursor()
+        # 쿼리 1 실행
+        cursor.execute(query1, params1)
+        graph_data = cursor.fetchall()
+        graph_cols = [col[0] for col in cursor.description]
+        graph_df = pd.DataFrame(graph_data, columns=graph_cols)
+
+        # 쿼리 2 실행
+        cursor.execute(query2, params2)
+        table_data = cursor.fetchall()
+        table_cols = [col[0] for col in cursor.description]
+        table_df = pd.DataFrame(table_data, columns=table_cols)
+
+        cursor.close()
+        # print("스케줄 데이터 가져오기 성공") # print 문 제거
     except Exception as e:
-        st.error(f"스케줄 테이블 데이터를 가져오는 중 오류 발생: {e}")
-        return pd.DataFrame()
+        # print(f"데이터 조회 오류: {e}") # print 문 제거
+        graph_df = pd.DataFrame() # 오류 시 빈 데이터프레임 반환
+        table_df = pd.DataFrame() # 오류 시 빈 데이터프레임 반환
+    finally:
+        if conn:
+             conn.close()
 
-# 데이터 가져오는 함수 (상태별 카운트용)
-def fetch_status_counts(conn, selected_statuses, start_time, end_time):
-    if conn is None:
-        return pd.DataFrame()
+    # 데이터 가공: 그래프 데이터 시간대 정렬
+    if not graph_df.empty:
+         graph_df['HOURLY_DT'] = pd.to_datetime(graph_df['HOURLY'], format='%Y-%m-%d %H', errors='coerce')
+         graph_df = graph_df.sort_values('HOURLY_DT')
+         graph_df['HOURLY_STR'] = graph_df['HOURLY_DT'].dt.strftime('%Y-%m-%d %H')
 
-    status_filter = ""
-    all_statuses = ["R", "X", "S", "F", "K"] # 모든 가능한 상태값
-    # 선택된 상태가 있다면 그 상태만 필터링, 없다면 모든 상태 포함
-    if selected_statuses:
-        status_filter = f"AND task_status IN ({', '.join([f"'{s}'" for s in selected_statuses])})"
-    # else: # 아무것도 선택 안하면 모든 상태를 포함하여 쿼리
-        # status_filter = f"AND task_status IN ({', '.join([f"'{s}'" for s in all_statuses])})"
+    return graph_df, table_df
 
-
+# show_spinner=False 추가하여 캐시 로드/업데이트 시 스피너 숨김
+@st.cache_resource(ttl=3, show_spinner=False) # 3초 동안 캐싱, 스피너 숨김
+def get_system_metrics_cached():
+    """시스템 전반의 메트릭스 정보를 가져옵니다."""
+    # print("시스템 메트릭스 데이터 가져오기...") # print 문 제거
+    metrics = {}
     try:
-        start_ts = start_time.strftime('%Y-%m-%d %H:%M:%S')
-        end_ts = end_time.strftime('%Y-%m-%d %H:%M:%S')
-    except AttributeError:
-        st.warning("날짜/시간 선택을 완료해주세요.")
-        return pd.DataFrame()
+        metrics['CPU 사용률'] = f"{psutil.cpu_percent(interval=0.1):.1f}%"
+        mem = psutil.virtual_memory()
+        metrics['총 메모리 사이즈'] = f"{mem.total / (1024**3):.2f} GB"
+        metrics['메모리 사용 중 사이즈'] = f"{mem.used / (1024**3):.2f} GB"
+        metrics['메모리 사용가능 사이즈'] = f"{mem.available / (1024**3):.2f} GB"
+        metrics['메모리 사용률'] = f"{mem.percent:.1f}%"
+
+        try:
+            disk = psutil.disk_usage('/') # Linux/macOS
+        except Exception:
+             try:
+                 disk = psutil.disk_usage('C:/') # Windows 예시
+             except Exception as disk_e:
+                 # print(f"디스크 사용량 조회 오류 (경로 확인 필요): {disk_e}") # print 문 제거
+                 metrics['디스크 사용률'] = "N/A (Path Error)"
+                 pass
+
+        if '디스크 사용률' not in metrics:
+             try:
+                metrics['디스크 사용률'] = f"{disk.percent:.1f}%"
+             except UnboundLocalError:
+                 metrics['디스크 사용률'] = "N/A (Not Available)"
 
 
-    query = f"""
-    SELECT task_status, COUNT(task_status) as count
-    FROM task
-    WHERE subprocee_starttime BETWEEN TO_TIMESTAMP(:start_ts_str, 'YYYY-MM-DD HH24:MI:SS') AND TO_TIMESTAMP(:end_ts_str, 'YYYY-MM-DD HH24:MI:SS')
-    {status_filter}
-    GROUP BY task_status
-    ORDER BY task_status
-    """
-    try:
-        # 바인드 변수 사용
-        params = {'start_ts_str': start_ts, 'end_ts_str': end_ts}
-        df = pd.read_sql(query, conn, params=params)
-        # 데이터프레임에 모든 가능한 상태를 포함시키고, 없는 상태는 count를 0으로 채움
-        # 이렇게 해야 테이블에 모든 상태가 표시되고 색상 적용이 용이함.
-        full_df = pd.DataFrame({'TASK_STATUS': all_statuses})
-        merged_df = pd.merge(full_df, df, on='TASK_STATUS', how='left').fillna(0)
-        merged_df['COUNT'] = merged_df['COUNT'].astype(int) # Count는 정수로
-        return merged_df
-    except Exception as e:
-        st.error(f"상태별 카운트 데이터를 가져오는 중 오류 발생: {e}")
-        return pd.DataFrame()
-
-
-# 시스템 메트릭스 가져오는 함수
-def get_system_metrics():
-    try:
-        cpu_percent = psutil.cpu_percent(interval=None) # 논블로킹 호출
-        mem_info = psutil.virtual_memory()
-        # 디스크 사용량은 시스템 루트('/') 또는 'C:\' 등 플랫폼에 맞게 경로 설정
-        disk_path = '/'
-        if sys.platform == 'win32':
-            disk_path = 'C:\\'
-        disk_usage = psutil.disk_usage(disk_path)
         net_io = psutil.net_io_counters()
+        metrics['네트워크 Input'] = f"{net_io.bytes_recv / (1024**2):.2f} MB" # MB 단위로 표시
+        metrics['네트워크 Output'] = f"{net_io.bytes_sent / (1024**2):.2f} MB" # MB 단위로 표시
 
-        metrics = {
-            "CPU 사용률": f"{cpu_percent:.1f} %",
-            "메모리 사용률": f"{mem_info.percent:.1f} %",
-            "디스크 사용률": f"{disk_usage.percent:.1f} %",
-            "네트워크 Input": f"{net_io.bytes_recv / (1024*1024):.2f} MB", # MB 단위로 표시
-            "네트워크 Output": f"{net_io.bytes_sent / (1024*1024):.2f} MB", # MB 단위로 표시
-            "총 메모리 사이즈": f"{mem_info.total / (1024*1024*1024):.2f} GB", # GB 단위로 표시
-            "메모리 사용 중 사이즈": f"{mem_info.used / (1024*1024*1024):.2f} GB",
-            "메모리 사용가능 사이즈": f"{mem_info.available / (1024*1024*1024):.2f} GB",
-        }
-        return metrics
     except Exception as e:
-        # st.warning(f"시스템 메트릭스를 가져올 수 없습니다: {e}")
-        return {}
+        # print(f"시스템 메트릭스 정보 조회 오류: {e}") # print 문 제거
+        default_keys = ['CPU 사용률', '메모리 사용률', '디스크 사용률', '네트워크 Input', '네트워크 Output',
+                        '총 메모리 사이즈', '메모리 사용 중 사이즈', '메모리 사용가능 사이즈']
+        for key in default_keys:
+             if key not in metrics:
+                 metrics[key] = "N/A"
 
-# 프로세스 목록 및 CPU/Memory 사용량 가져오는 함수
-def get_process_metrics():
-    process_list = []
+    return metrics
+
+# show_spinner=False 추가하여 캐시 로드/업데이트 시 스피너 숨김
+@st.cache_resource(ttl=3, show_spinner=False) # 3초 동안 캐싱, 스피너 숨김
+def get_process_info_cached(sort_by='cpu', top_n=5):
+    """CPU 또는 메모리 사용량 상위 N개 프로세스 정보를 가져옵니다."""
+    # print(f"{sort_by.upper()} Top 5 프로세스 데이터 가져오기...") # print 문 제거
+    processes = []
     try:
-        # cpu_percent는 interval=None으로 설정하면 이전 호출 이후 사용량을 반환.
-        # 정확한 순간 사용량을 위해선 interval > 0 으로 설정하고 블로킹 호출을 하거나,
-        # 짧은 간격으로 두 번 호출하는 방식이 필요. Streamlit에선 복잡하므로 단순 호출.
-        # memory_info는 rss (Resident Set Size)를 사용.
+        all_processes = []
         for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_info', 'cmdline']):
             try:
-                pinfo = proc.as_dict(attrs=['pid', 'name', 'cpu_percent', 'memory_info', 'cmdline'])
-                # cmdline은 리스트 또는 문자열일 수 있음. Windows에서 문자열 가능성 고려.
-                # None 값이 들어오는 경우도 처리
-                cmd_parts = pinfo.get('cmdline')
-                if cmd_parts is None:
-                     cmd = ''
-                elif isinstance(cmd_parts, list):
-                    cmd = ' '.join(cmd_parts)
-                else: # assume string
-                    cmd = str(cmd_parts)
+                cpu_p = proc.cpu_percent(interval=0)
+                mem_i = proc.memory_info()
+                cmd_l = proc.cmdline()
 
-                # memory_info가 None인 경우 처리
-                mem_rss = pinfo.get('memory_info')
-                mem_rss_bytes = mem_rss.rss if mem_rss else 0
-
-                process_list.append({
-                    'PID': pinfo['pid'],
-                    '프로세스명': pinfo['name'],
-                    'CPU 사용률 (%)': pinfo['cpu_percent'],
-                    '메모리 사용량 (Bytes)': mem_rss_bytes, # Resident Set Size
-                    '커맨드': cmd
-                })
+                pinfo = {
+                    'pid': proc.pid,
+                    'name': proc.name(),
+                    'cpu_percent': cpu_p,
+                    'memory_info': mem_i,
+                    'cmdline': cmd_l,
+                    'memory_mb': mem_i.rss / (1024**2)
+                }
+                all_processes.append(pinfo)
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-                pass # 해당 프로세스에 접근할 수 없는 경우 무시
-        df = pd.DataFrame(process_list)
-        if not df.empty:
-             df['메모리 사용량 (MB)'] = df['메모리 사용량 (Bytes)'] / (1024 * 1024) # MB로 변환
-             df = df.drop(columns=['메모리 사용량 (Bytes)']) # Bytes 컬럼 제거
-        return df
+                pass
+            except Exception as e:
+                 # print(f"개별 프로세스 정보 가져오기 중 오류: {e} - PID: {proc.pid if 'proc' in locals() else 'N/A'}") # print 문 제거
+                 pass
+
+        if sort_by == 'cpu':
+            sorted_processes = sorted(all_processes, key=lambda x: x.get('cpu_percent', 0.0), reverse=True)
+        elif sort_by == 'memory':
+            sorted_processes = sorted(all_processes, key=lambda x: x.get('memory_mb', 0.0), reverse=True)
+        else:
+            sorted_processes = all_processes
+
+        for p in sorted_processes:
+            cmd = p.get('cmdline')
+            if cmd:
+                full_cmd = ' '.join(cmd) if isinstance(cmd, list) else str(cmd)
+                p['command'] = full_cmd
+            else:
+                p['command'] = ""
+
+        return sorted_processes[:top_n]
+
     except Exception as e:
-        # st.warning(f"프로세스 메트릭스를 가져올 수 없습니다: {e}")
-        return pd.DataFrame()
+        # print(f"프로세스 정보 조회 오류: {e}") # print 문 제거
+        return []
 
-# --- HTML 테이블 생성 함수 (스타일 및 툴팁 적용) ---
 
-# 상태별 카운트 테이블 HTML 생성
-def generate_status_count_html(df):
+# --- 그래프 생성 함수 ---
+# ... (create_schedule_graph 함수 동일) ...
+def create_schedule_graph(df, graph_type, status_colors):
+    """스케줄 현황 그래프를 생성합니다."""
     if df.empty:
-        return "<p style='color: black; background-color: white; padding: 5px; border: 1px solid gray;'>데이터 없음</p>"
+        fig = go.Figure()
+        fig.update_layout(
+            title="데이터 없음",
+            xaxis_title="시간대",
+            yaxis_title="스케줄 건수",
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            font=dict(color='black')
+        )
+        return fig
 
-    html = "<table style='width:100%; border-collapse: collapse;'><thead><tr>"
-    # Header row
-    html += "<th style='padding: 8px; border: 1px solid gray; background-color: white; color: black;'>상태</th>"
-    html += "<th style='padding: 8px; border: 1px solid gray; background-color: white; color: black;'>개수</th>"
-    html += "</tr></thead><tbody>"
+    df_sorted = df.sort_values('HOURLY_DT')
 
-    # Data rows with status color
-    for index, row in df.iterrows():
-        status = row['TASK_STATUS']
-        count = row['COUNT']
-        color = COLOR_MAP.get(status, 'black') # 상태에 따른 색상 가져오기
-        # 상태 셀에만 색상 적용
-        html += f"<tr>"
-        html += f"<td style='padding: 8px; border: 1px solid gray; background-color: white; color: {color};'><b>{status}</b></td>" # 상태 셀 색상 적용, 굵게
-        html += f"<td style='padding: 8px; border: 1px solid gray; background-color: white; color: black;'>{count}</td>" # 개수 셀 검은색
-        html += f"</tr>"
+    if graph_type == '꺽은선':
+         fig = px.line(df_sorted, x='HOURLY_STR', y='cnt_status', color='TASK_STATUS',
+                       title='스케줄 현황 그래프',
+                       labels={'HOURLY_STR': '시간대', 'cnt_status': '스케줄 건수', 'TASK_STATUS': '상태'},
+                       color_discrete_map=status_colors,
+                       markers=True,
+                       template="plotly_white")
+    else: # 막대 그래프
+        fig = px.bar(df_sorted, x='HOURLY_STR', y='cnt_status', color='TASK_STATUS',
+                     title='스케줄 현황 그래프',
+                     labels={'HOURLY_STR': '시간대', 'cnt_status': '스케줄 건수', 'TASK_STATUS': '상태'},
+                     color_discrete_map=status_colors,
+                     template="plotly_white")
 
-    html += "</tbody></table>"
-    return html
+    fig.update_layout(
+        xaxis_title="시간대",
+        yaxis_title="스케줄 건수",
+        font=dict(color='black'),
+        xaxis=dict(tickangle=-45, tickfont=dict(color='black')),
+        yaxis=dict(tickfont=dict(color='black')),
+        legend=dict(font=dict(color='black')),
+        hovermode="x unified",
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+    )
 
-# 스케줄 테이블 HTML 생성 (날짜 포맷 및 상태 색상 적용)
-def generate_schedule_table_html(df):
+    return fig
+
+
+# --- 테이블 표시 함수 ---
+# ... (display_schedule_table, display_status_count_table, display_system_metrics_table, display_process_table 함수 동일) ...
+
+def display_schedule_table(df):
+    """스케줄 현황 테이블을 표시합니다."""
     if df.empty:
-        return "<p style='color: black; background-color: white; padding: 5px; border: 1px solid gray;'>데이터 없음</p>"
+        st.write("스케줄 현황 데이터가 없습니다.")
+        return
 
-    html = "<table style='width:100%; border-collapse: collapse;'><thead><tr>"
-    # Header row
-    for col in df.columns:
-        html += f"<th style='padding: 8px; border: 1px solid gray; background-color: white; color: black;'>{col}</th>"
-    html += "</tr></thead><tbody>"
+    if 'SUBPROCEE_STARTTIME' in df.columns:
+        try:
+            if pd.api.types.is_datetime64_any_dtype(df['SUBPROCEE_STARTTIME']):
+                 df['SUBPROCEE_STARTTIME'] = df['SUBPROCEE_STARTTIME'].dt.tz_convert(None).dt.strftime('%Y-%m-%d %H:%M:%S')
+            else:
+                 df['SUBPROCEE_STARTTIME'] = df['SUBPROCEE_STARTTIME'].astype(str)
 
-    # Data rows
-    for index, row in df.iterrows():
-        html += "<tr>"
-        for col in df.columns:
-            cell_value = row[col]
-            # Datetime 객체 포맷팅
-            if isinstance(cell_value, datetime.datetime):
-                 cell_value = cell_value.strftime('%Y-%m-%d %H:%M:%S')
-            # None 값 처리
-            elif cell_value is None:
-                 cell_value = ""
+        except Exception as e:
+             print(f"날짜/시간 포맷팅 오류: {e}")
+             df['SUBPROCEE_STARTTIME'] = df['SUBPROCEE_STARTTIME'].astype(str)
 
-            # TASK_STATUS 컬럼에 상태별 색상 적용
-            cell_style = 'padding: 8px; border: 1px solid gray; background-color: white; color: black;'
-            if col == 'TASK_STATUS':
-                 status_color = COLOR_MAP.get(row['TASK_STATUS'], 'black')
-                 cell_style = f'padding: 8px; border: 1px solid gray; background-color: white; color: {status_color};'
-                 cell_value = f"<b>{cell_value}</b>" # 상태 굵게
+    st.dataframe(df, use_container_width=True)
 
-            html += f"<td style='{cell_style}'>{cell_value}</td>"
-        html += "</tr>"
+def display_status_count_table(df_status_counts, status_colors):
+    """상태별 스케줄 카운트 테이블을 표시합니다."""
+    if df_status_counts.empty:
+        st.write("상태별 스케줄 카운트 데이터가 없습니다.")
+        return
+    if '상태' not in df_status_counts.columns or '건수' not in df_status_counts.columns:
+        st.write("상태별 스케줄 카운트 데이터 형식이 올바르지 않습니다.")
+        return
 
-    html += "</tbody></table>"
-    return html
+    status_order = list(STATUS_COLORS.keys())
+    try:
+        df_status_counts['상태'] = pd.Categorical(df_status_counts['상태'], categories=status_order, ordered=True)
+        df_status_counts = df_status_counts.sort_values('상 상태') # '상태' 컬럼으로 정렬
+    except Exception as e:
+        print(f"상태 컬럼 Categorical 변환 또는 정렬 오류: {e}")
+        pass
 
-# 프로세스 Top5 테이블 HTML 생성 (툴팁 적용)
-def generate_process_table_html(df, type):
-    if df.empty:
-        return "<p style='color: black; background-color: white; padding: 5px; border: 1px solid gray;'>데이터 없음</p>"
+    def color_status_row(row):
+        status_value = row['상태']
+        color = status_colors.get(status_value, 'white')
+        return [f'background-color: {color}; color: black;' for _ in row.index]
 
-    html = "<table style='width:100%; border-collapse: collapse;'><thead><tr>"
-    # Header row
-    if type == 'CPU':
-        html += "<th style='padding: 8px; border: 1px solid gray; background-color: white; color: black;'>프로세스명</th><th style='padding: 8px; border: 1px solid gray; background-color: white; color: black;'>CPU 사용률 (%)</th><th style='padding: 8px; border: 1px solid gray; background-color: white; color: black;'>커맨드</th>"
-    else: # Memory
-        html += "<th style='padding: 8px; border: 1px solid gray; background-color: white; color: black;'>프로세스명</th><th style='padding: 8px; border: 1px solid gray; background-color: white; color: black;'>메모리 사용량 (MB)</th><th style='padding: 8px; border: 1px solid gray; background-color: white; color: black;'>커맨드</th>"
-    html += "</tr></thead><tbody>"
+    styled_df = df_status_counts.style.apply(color_status_row, axis=1)
 
-    # Data rows
-    for index, row in df.iterrows():
-        html += "<tr>"
-        # 프로세스명
-        html += f"<td style='padding: 8px; border: 1px solid gray; background-color: white; color: black;'>{row['프로세스명']}</td>"
-        # 값 (CPU 사용률 또는 메모리 사용량)
-        if type == 'CPU':
-             html += f"<td style='padding: 8px; border: 1px solid gray; background-color: white; color: black;'>{row['CPU 사용률 (%)']:.1f}</td>"
-        else: # Memory
-             html += f"<td style='padding: 8px; border: 1px solid gray; background-color: white; color: black;'>{row['메모리 사용량 (MB)']:.1f}</td>"
+    st.dataframe(
+        styled_df,
+        use_container_width=True
+    )
 
-        # 커맨드 (툴팁 적용)
-        command = row['커맨드']
-        # 셀에는 일정 길이만 표시하고, 전체 내용은 툴팁으로
-        display_command = command[:50] + ('...' if len(command) > 50 else '')
-        # 툴팁에 표시될 내용의 HTML 특수 문자 이스케이프
-        command_escaped = command.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;').replace("'", '&#039;')
+def display_system_metrics_table(metrics):
+    """시스템 메트릭스 정보를 테이블 형태로 표시합니다."""
+    if not metrics:
+        st.write("시스템 메트릭스 정보를 가져올 수 없습니다.")
+        return
 
-        html += f"<td style='padding: 8px; border: 1px solid gray; background-color: white; color: black;' title='{command_escaped}'>{display_command}</td>" # title 속성이 툴팁 역할
-        html += "</tr>"
+    ordered_keys = [
+        'CPU 사용률', '메모리 사용률', '디스크 사용률', '네트워크 Input', '네트워크 Output',
+        '총 메모리 사이즈', '메모리 사용 중 사이즈', '메모리 사용가능 사이즈'
+    ]
+    metrics_list = [[key, metrics.get(key, 'N/A')] for key in ordered_keys]
 
-    html += "</tbody></table>"
-    return html
+    metrics_df = pd.DataFrame(metrics_list, columns=['메트릭', '값'])
+    st.dataframe(metrics_df, use_container_width=True, hide_index=True)
 
-# --- Streamlit 앱 실행 함수 ---
-def run_dashboard():
-    # Streamlit 페이지 설정 (전체 폭 사용)
-    st.set_page_config(layout="wide")
+def display_process_table(processes, sort_by):
+    """프로세스 정보를 테이블 형태로 표시합니다."""
+    if not processes:
+         st.write(f"{sort_by.upper()} Top 5 프로세스 정보가 없습니다.")
+         return
 
-    # CSS 스타일 주입
-    # 배경색, 제목색, 표/그래프 배경색, 글씨색, 테두리 등 스타일 적용
-    st.markdown("""
-        <style>
-        body {
-            background-color: black; /* 전체 배경 검은색 */
-            color: white; /* 기본 글씨색 하얀색 */
-        }
-        h1, h2, h3, h4, h5, h6 {
-            color: yellow; /* 제목 노란색 */
-        }
-        /* 입력 위젯 (select, date input 등)의 스타일은 Streamlit 테마 또는 별도 CSS로 커스터마이징 필요 */
-        /* 여기서는 표와 그래프 배경/글씨색에 집중 */
+    if sort_by == 'cpu':
+        df = pd.DataFrame([{
+            'PID': p.get('pid', 'N/A'),
+            '프로세스명': p.get('name', 'N/A'),
+            'CPU 사용률 (%)': f"{p.get('cpu_percent', 0.0):.1f}",
+            '커맨드': p.get('command', '')
+        } for p in processes])
+        st.dataframe(df, use_container_width=True)
 
-        /* 표 스타일 (HTML 테이블에 적용) */
-        table {
-            background-color: white; /* 표 배경 흰색 */
-            color: black; /* 표 글씨 검은색 */
-            border-collapse: collapse; /* 테두리 겹침 */
-            width: 100%;
-            margin-bottom: 15px; /* 표 아래 여백 */
-        }
-        th, td {
-            padding: 8px;
-            text-align: left;
-            border: 1px solid gray; /* 표 테두리 회색 */
-        }
-        th {
-            background-color: #f2f2f2; /* 헤더 배경색 (흰색 계열) */
-             color: black;
-        }
-        tbody tr:nth-child(even) { /* 짝수 행 배경색 (필요시) */
-            /* background-color: #f9f9f9; */
-        }
-
-        /* Plotly 그래프 배경 설정 */
-        .js-plotly-plot {
-             background-color: white !important;
-             border: 1px solid gray; /* 그래프 테두리 회색 */
-        }
-        .modebar-container {
-             background-color: white !important; /* Plotly 툴바 배경 */
-             color: black !important; /* Plotly 툴바 아이콘 색상 */
-        }
-         .plotly .modebar-btn {
-            color: black !important; /* Plotly 툴바 버튼 아이콘 색상 */
-         }
-
-         /* 데이터프레임 기본 스타일 오버라이드 (HTML 테이블 사용으로 대체) */
-         /* .stDataFrame div[data-testid="StyledFullScreenButton"] {
-             color: black;
-         }
-          .stDataFrame {
-              background-color: white !important;
-              color: black !important;
-              border: 1px solid gray !important;
-          }
-          .stDataFrame th {
-               background-color: #f2f2f2 !important;
-               color: black !important;
-               border: 1px solid gray !important;
-          }
-           .stDataFrame td {
-               color: black !important;
-               border: 1px solid gray !important;
-           } */
+    elif sort_by == 'memory':
+        df = pd.DataFrame([{
+            'PID': p.get('pid', 'N/A'),
+            '프로세스명': p.get('name', 'N/A'),
+            '메모리 사용량 (MB)': f"{p.get('memory_mb', 0.0):.2f}",
+            '커맨드': p.get('command', '')
+        } for p in processes])
+        st.dataframe(df, use_container_width=True)
 
 
-        </style>
-    """, unsafe_allow_html=True)
+# --- 데이터 로딩 및 업데이트 로직 ---
+def load_and_update_data():
+    """
+    데이터를 로드하고 필요한 경우 Session State를 업데이트합니다.
+    이 함수는 메인 스크립트 실행 시마다 호출됩니다.
+    캐시된 함수를 호출하며, 캐시 만료 시 실제 데이터 가져오기가 발생합니다.
+    show_spinner=False로 스피너는 숨겨집니다.
+    """
+    current_time = datetime.datetime.now()
 
-    # Oracle DB 연결 초기화
-    conn = get_oracle_connection()
-    if conn is None:
-        # 연결 실패 시 오류 메시지 표시 및 앱 중단
-        # init_connection 함수에서 이미 오류 메시지를 표시합니다.
-        # time.sleep(5) # 오류 메시지를 볼 시간 제공 (선택 사항)
-        st.stop()
+    # 1. 시스템 메트릭스 및 Top 5 프로세스 업데이트 (3초마다)
+    system_update_interval = 3 # 초
+    # 마지막 업데이트 시간 + 주기 <= 현재 시간 이면 업데이트 실행
+    if st.session_state.get('last_system_update_time', datetime.datetime.min) + datetime.timedelta(seconds=system_update_interval) <= current_time:
+        st.session_state['system_metrics_data'] = get_system_metrics_cached()
+        st.session_state['cpu_top5_data'] = get_process_info_cached(sort_by='cpu', top_n=5)
+        st.session_state['memory_top5_data'] = get_process_info_cached(sort_by='memory', top_n=5)
+        st.session_state['last_system_update_time'] = current_time # 업데이트 시간 갱신
+        # print("시스템 메트릭스 데이터 로드/업데이트 완료") # print 문 제거
 
-    # 세션 상태 초기화 (업데이트 시간 추적용)
-    if 'last_metrics_update' not in st.session_state:
-        st.session_state.last_metrics_update = datetime.datetime.now()
-    if 'last_graph_update' not in st.session_state:
-        st.session_state.last_graph_update = datetime.datetime.now()
-    # 시계는 매 턴마다 업데이트되므로 별도 타이머 불필요
 
-    # --- 헤더 ---
-    # 좌, 중, 우 3등분 (비율 조정 가능)
-    header_cols = st.columns([1, 3, 1])
+    # 2. 스케줄 데이터 업데이트 (ON 상태일 때 1분마다 또는 필터 변경 시 즉시)
+    schedule_update_interval = 60 # 초 (1분)
+    # 스케줄 데이터 업데이트가 필요한 조건:
+    # - 자동 업데이트 ON 상태이고 1분 주기 시간이 경과했거나
+    # - 자동 업데이트 OFF 상태인데 위젯 변경으로 last_schedule_update_time이 과거(datetime.min)로 설정된 경우
+    # 이 조건에 해당하면 데이터를 새로 로드합니다.
+
+    is_schedule_update_triggered = False
+    # ON 상태 시간 경과 체크
+    if st.session_state.get('auto_update', 'OFF') == 'ON' and \
+       st.session_state.get('last_schedule_update_time', datetime.datetime.min) + datetime.timedelta(seconds=schedule_update_interval) <= current_time:
+        is_schedule_update_triggered = True
+        st.session_state['last_schedule_update_time'] = current_time # ON 상태 시간 경과 시에만 갱신
+
+    # OFF 상태 필터 변경 감지 (on_change에서 last_schedule_update_time을 datetime.min으로 설정하여 감지)
+    # 또는 최초 로드 시
+    if st.session_state.get('last_schedule_update_time', datetime.datetime.min) == datetime.datetime.min:
+         is_schedule_update_triggered = True
+
+
+    # 실제 데이터 로드가 필요한 경우 (캐시 TTL 만료, 또는 인자 변경)
+    # fetch_schedule_data_cached 함수는 인자가 변경되거나 TTL이 만료되면 실제 데이터 로드를 수행합니다.
+    # is_schedule_update_triggered 조건이 True일 때만 데이터를 로드하도록 로직 수정
+
+    if is_schedule_update_triggered:
+        # 시간 범위 결정 (ON/OFF 모두 켈린더 값 사용)
+        start_datetime_obj = datetime.datetime.combine(st.session_state.get('start_date', datetime.date.today() - datetime.timedelta(days=1)),
+                                                        st.session_state.get('start_time', datetime.time(0, 0)))
+        end_datetime_obj = datetime.datetime.combine(st.session_state.get('end_date', datetime.date.today() + datetime.timedelta(days=1)),
+                                                      st.session_state.get('end_time', datetime.time(0, 0)))
+
+        # 캐시된 함수 호출 (인자 변경 또는 1분 캐시 만료 시 실제 데이터 가져옴)
+        # 스피너는 show_spinner=False로 숨겨짐
+        # on_change에서 last_schedule_update_time을 datetime.min으로 설정하면
+        # fetch_schedule_data_cached는 인자 변경을 감지하고 캐시를 무시함.
+        # ON 상태 시간 경과는 load_and_update_data가 호출될 때 last_schedule_update_time 체크로 트리거.
+        # 실제 데이터가 새로 로드될 때만 session_state 업데이트?
+        # -> 아니오, is_schedule_update_triggered 조건 충족 시 항상 캐시 함수 호출 및 session_state 업데이트.
+        #    캐시 히트 시는 빠른 반환.
+
+        graph_df, table_df = fetch_schedule_data_cached(
+            st.session_state.get('schedule_status_filter', list(STATUS_COLORS.keys())),
+            start_datetime_obj,
+            end_datetime_obj
+        )
+
+        # session_state에 데이터 저장
+        st.session_state['schedule_graph_data'] = graph_df
+        st.session_state['schedule_table_data'] = table_df
+
+        # 상태별 카운트 데이터 계산 및 저장
+        if not table_df.empty and 'TASK_STATUS' in table_df.columns:
+            st.session_state['status_count_data'] = table_df['TASK_STATUS'].value_counts().reset_index()
+            st.session_state['status_count_data'].columns = ['상태', '건수']
+        else:
+            st.session_state['status_count_data'] = pd.DataFrame(columns=['상태', '건수'])
+
+        # 데이터 로드/업데이트 시 last_schedule_update_time 갱신
+        # on_change에서 datetime.min으로 설정한 상태는 여기서 현재 시간으로 갱신됨.
+        st.session_state['last_schedule_update_time'] = current_time
+        # print("스케줄 데이터 Session State 업데이트 및 시간 갱신 완료") # print 문 제거
+    # else:
+        # print("스케줄 데이터 업데이트 조건 미충족") # print 문 제거
+
+
+# --- 메인 대시보드 레이아웃 및 로직 ---
+def main():
+    # st.set_page_config는 main 함수 밖에서 이미 호출됨
+
+    # 데이터 로딩 및 업데이트 (Session State에 저장)
+    # 매 스크립트 실행마다 호출되어 캐시 유효성 및 업데이트 주기 체크
+    load_and_update_data()
+
+
+    # --- 맨 위 헤더 (타이틀 및 실시간 시계) ---
+    header_cols = st.columns([4, 1])
+    with header_cols[0]:
+        st.markdown("<h1>스케줄 데쉬보드</h1>", unsafe_allow_html=True)
     with header_cols[1]:
-        st.markdown("<h1 style='text-align: center; color: yellow;'>스케줄 데시보드</h1>", unsafe_allow_html=True)
-    with header_cols[2]:
-        # 실시간 시계 (Streamlit 턴마다 업데이트)
+        # 실시간 시계는 매 rerun 시 현재 시간으로 업데이트
+        # time.sleep(1)과 st.rerun() 조합으로 1초마다 스크립트가 실행되므로 초 단위 업데이트 가능
         current_time = datetime.datetime.now()
-        st.markdown(f"<h1 style='text-align: right; color: yellow;'>{current_time.strftime('%Y-%m-%d %H:%M:%S')}</h1>", unsafe_allow_html=True)
+        st.markdown(f"<h1>{current_time.strftime('%Y-%m-%d %H:%M:%S')}</h1>", unsafe_allow_html=True)
 
 
-    # --- 메인 레이아웃 (세로 3:1 비율) ---
+    # --- 메인 화면 레이아웃 (세로 3:1 분할) ---
     main_cols = st.columns([3, 1])
 
-    # --- 왼쪽 컬럼 (비율 3) ---
+    # --- 왼쪽 영역 (3/4) ---
     with main_cols[0]:
-        st.markdown("<h3 style='color: yellow;'>스케줄 현황</h3>", unsafe_allow_html=True)
+        st.markdown("<h3>스케줄 현황</h3>", unsafe_allow_html=True)
 
-        # 스케줄 검색 조건 영역
+        # 스케줄 현황 그래프 표시 (Session State 데이터 사용)
+        st.markdown("스케줄 현황 그래프") # Placeholder 대신 타이틀 재표시
+        fig = create_schedule_graph(
+            st.session_state.get('schedule_graph_data', pd.DataFrame()),
+            st.session_state.get('graph_type', '꺽은선'),
+            STATUS_COLORS
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+
         st.markdown("<h4>스케줄 검색 조건</h4>", unsafe_allow_html=True)
-        # 컬럼 분할하여 위젯 배치
-        search_cols = st.columns([2, 2, 3, 1, 3, 2]) # 상태, 그래프 종류, 시작날짜, -, 끝날짜, ON/OFF
 
-        with search_cols[0]:
+        # 스케줄 검색 조건 위젯 레이아웃 ("-" 위치 수정)
+        # 총 8개 컬럼: [상태(1), 그래프 종류(1), 시작 날짜(1), 시작 시간(1), -(0.3), 끝 날짜(1), 끝 시간(1), 자동 업데이트(1)]
+        filter_cols = st.columns([1, 1, 1, 1, 0.3, 1, 1, 1])
+
+        with filter_cols[0]: # 스케줄 상태
             selected_statuses = st.multiselect(
                 "스케줄 상태",
-                ["R", "X", "S", "F", "K"],
-                default=["R", "X", "S", "F", "K"], # 기본값은 모두 선택
-                key='selected_statuses' # 위젯 상태 유지를 위한 고유 키
+                list(STATUS_COLORS.keys()),
+                default=st.session_state.get('schedule_status_filter', list(STATUS_COLORS.keys())),
+                key='status_select',
+                # 필터 변경 시 last_schedule_update_time을 과거로 설정하여 다음 rerun 시 데이터 로드 트리거
+                on_change=lambda: st.session_state.update(schedule_status_filter=st.session_state['status_select'], last_schedule_update_time=datetime.datetime.min)
             )
-        with search_cols[1]:
-            graph_type = st.selectbox(
+
+        with filter_cols[1]: # 그래프 종류
+            selected_graph_type = st.selectbox(
                 "그래프 종류",
-                ["꺽은선", "막대"],
-                key='graph_type' # 위젯 상태 유지를 위한 고유 키
-            )
-        with search_cols[5]:
-            date_filter_on = st.selectbox(
-                "날짜 필터",
-                ["OFF", "ON"],
-                index=0, # 기본값 'OFF'
-                key='date_filter_on' # 위젯 상태 유지를 위한 고유 키
+                ['꺽은선', '막대'],
+                index=['꺽은선', '막대'].index(st.session_state.get('graph_type', '꺽은선')),
+                key='graph_type_select',
+                on_change=lambda: st.session_state.update(graph_type=st.session_state['graph_type_select'])
             )
 
-        # 날짜/시간 필터 설정
-        now = datetime.datetime.now()
-        # 기본 시간 범위 (필터 OFF 시)
-        default_start_off = now - datetime.timedelta(hours=24)
-        default_end_off = now + datetime.timedelta(hours=24)
+        with filter_cols[2]: # 시작 날짜
+            selected_start_date = st.date_input(
+                "시작 날짜",
+                st.session_state.get('start_date', datetime.date.today() - datetime.timedelta(days=1)),
+                key='start_date_select',
+                on_change=lambda: st.session_state.update(start_date=st.session_state['start_date_select'], last_schedule_update_time=datetime.datetime.min)
+            )
 
-        # 필터 ON 시 기본 시간 범위 (초기 로딩 시)
-        if 'start_date_on' not in st.session_state:
-             st.session_state.start_date_on = (now - datetime.timedelta(hours=1)).date()
-        if 'start_time_on' not in st.session_state:
-             st.session_state.start_time_on = (now - datetime.timedelta(hours=1)).time()
-        if 'end_date_on' not in st.session_state:
-             st.session_state.end_date_on = now.date()
-        if 'end_time_on' not in st.session_state:
-             st.session_state.end_time_on = now.time()
+        with filter_cols[3]: # 시작 시간
+            selected_start_time = st.time_input(
+                "시작 시간",
+                 st.session_state.get('start_time', datetime.time(0, 0)),
+                 key='time_start_select', # time_input key 변경 (date_input과 겹치지 않도록)
+                 on_change=lambda: st.session_state.update(start_time=st.session_state['time_start_select'], last_schedule_update_time=datetime.datetime.min)
+            )
 
+        with filter_cols[4]: # "-" 표시 (시작 시간과 끝 날짜 사이)
+             # 위젯 레이블과 입력 필드 사이의 높이를 고려하여 "-" 위치 조정
+             # 이전보다 조금 더 내려서 입력 필드 라인에 가깝게 배치
+             # time_input과 date_input의 높이를 보고 적절히 조정 (대략 2.5em ~ 3em 사이)
+             st.markdown("<div style='height: 2.8em;'></div>", unsafe_allow_html=True) # 빈 공간 추가
+             st.markdown("<span class='yellow-text'>-</span>", unsafe_allow_html=True) # 노란색 "-" 표시
 
-        # 날짜/시간 입력 위젯 배치
-        with search_cols[2]:
-            start_date_input = st.date_input("시작 날짜",
-                                           value=st.session_state.start_date_on if date_filter_on == "ON" else default_start_off.date(),
-                                           key='start_date_widget') # 고유 키
-            start_time_input = st.time_input("시작 시간",
-                                           value=st.session_state.start_time_on if date_filter_on == "ON" else default_start_off.time(),
-                                           step=60, # 1분 단위
-                                           key='start_time_widget') # 고유 키
+        with filter_cols[5]: # 끝 날짜
+            selected_end_date = st.date_input(
+                "끝 날짜",
+                st.session_state.get('end_date', datetime.date.today() + datetime.timedelta(days=1)),
+                key='end_date_select',
+                on_change=lambda: st.session_state.update(end_date=st.session_state['end_date_select'], last_schedule_update_time=datetime.datetime.min)
+            )
 
-        search_cols[3].markdown("<h1 style='text-align: center;'>-</h1>", unsafe_allow_html=True) # 구분자 표시
+        with filter_cols[6]: # 끝 시간
+            selected_end_time = st.time_input(
+                "끝 시간",
+                 st.session_state.get('end_time', datetime.time(0, 0)),
+                 key='time_end_select', # time_input key 변경
+                 on_change=lambda: st.session_state.update(end_time=st.session_state['time_end_select'], last_schedule_update_time=datetime.datetime.min)
+            )
 
-        with search_cols[4]:
-            end_date_input = st.date_input("끝 날짜",
-                                         value=st.session_state.end_date_on if date_filter_on == "ON" else default_end_off.date(),
-                                         key='end_date_widget') # 고유 키
-            end_time_input = st.time_input("끝 시간",
-                                         value=st.session_state.end_time_on if date_filter_on == "ON" else default_end_off.time(),
-                                         step=60, # 1분 단위
-                                         key='end_time_widget') # 고유 키
-
-        # 사용자가 'ON' 상태에서 선택한 날짜/시간을 세션 상태에 저장 (rerun 시 값 유지를 위해)
-        if date_filter_on == "ON":
-             st.session_state.start_date_on = start_date_input
-             st.session_state.start_time_on = start_time_input
-             st.session_state.end_date_on = end_date_input
-             st.session_state.end_time_on = end_time_input
-
-
-        # 실제 데이터 필터링에 사용할 datetime 객체 결정
-        if date_filter_on == "OFF":
-             start_datetime_filter = datetime.datetime.combine(default_start_off.date(), default_start_off.time())
-             end_datetime_filter = datetime.datetime.combine(default_end_off.date(), default_end_off.time())
-        else: # ON
-             start_datetime_filter = datetime.datetime.combine(start_date_input, start_time_input)
-             end_datetime_filter = datetime.datetime.combine(end_date_input, end_time_input)
-
-        # 스케줄 현황 그래프 영역
-        st.markdown("<h4>스케줄 현황 그래프</h4>", unsafe_allow_html=True)
-        # 그래프 업데이트를 위한 placeholder
-        graph_placeholder = st.empty()
+        with filter_cols[7]: # 자동 업데이트 ON/OFF
+            auto_update_state = st.selectbox(
+                 "자동 업데이트",
+                 ['OFF', 'ON'],
+                 index=['OFF', 'ON'].index(st.session_state.get('auto_update', 'OFF')),
+                 key='auto_update_select',
+                 on_change=lambda: st.session_state.update(auto_update=st.session_state['auto_update_select'], last_schedule_update_time=datetime.datetime.min) # 상태 변경 시 강제 업데이트 트리거
+            )
 
 
-        # 스케줄 현황 테이블 영역
         st.markdown("<h4>스케줄 현황 테이블</h4>", unsafe_allow_html=True)
-        # 테이블 업데이트를 위한 placeholder
-        table_placeholder = st.empty()
+        display_schedule_table(st.session_state.get('schedule_table_data', pd.DataFrame()))
 
 
-    # --- 오른쪽 컬럼 (비율 1) ---
+    # --- 오른쪽 영역 (1/4) ---
     with main_cols[1]:
-        st.markdown("<h4 style='color: yellow;'>상태별 스케줄 카운트</h4>", unsafe_allow_html=True)
-        # 상태별 카운트 테이블 업데이트를 위한 placeholder
-        status_count_placeholder = st.empty()
-
-        st.markdown("<h4 style='color: yellow;'>스케줄 시스템 메트릭스</h4>", unsafe_allow_html=True)
-        # 시스템 메트릭스 업데이트를 위한 placeholder
-        metrics_placeholder = st.empty()
-
-        st.markdown("<h4 style='color: yellow;'>CPU Top5</h4>", unsafe_allow_html=True)
-        # CPU Top5 테이블 업데이트를 위한 placeholder
-        cpu_top5_placeholder = st.empty()
-
-        st.markdown("<h4 style='color: yellow;'>Memory Top5</h4>", unsafe_allow_html=True)
-        # Memory Top5 테이블 업데이트를 위한 placeholder
-        memory_top5_placeholder = st.empty()
+        st.markdown("<h4>상태별 스케줄 카운트</h4>", unsafe_allow_html=True)
+        display_status_count_table(st.session_state.get('status_count_data', pd.DataFrame(columns=['상태', '건수'])), STATUS_COLORS)
 
 
-    # --- 데이터 업데이트 및 표시 로직 (주기적 rerun 기반) ---
-    current_run_time = datetime.datetime.now()
-    needs_rerun = False # 이번 실행에서 rerun이 필요한지 여부
-
-    # 메트릭스, 상태 카운트, 프로세스 목록 업데이트 (METRICS_UPDATE_INTERVAL 주기)
-    time_since_metrics_update = (current_run_time - st.session_state.last_metrics_update).total_seconds()
-    if time_since_metrics_update >= METRICS_UPDATE_INTERVAL:
-        # 시스템 메트릭스 가져오기 및 표시
-        system_metrics = get_system_metrics()
-        metrics_html = "<table style='width:100%; border-collapse: collapse;'><tr><td style='padding: 8px; border: 1px solid gray; background-color: white; color: black;'><b>항목</b></td><td style='padding: 8px; border: 1px solid gray; background-color: white; color: black;'><b>값</b></td></tr>"
-        if system_metrics:
-             for key, value in system_metrics.items():
-                 metrics_html += f"<tr><td style='padding: 8px; border: 1px solid gray; background-color: white; color: black;'>{key}</td><td style='padding: 8px; border: 1px solid gray; background-color: white; color: black;'>{value}</td></tr>"
-        else:
-             metrics_html += "<tr><td colspan='2' style='padding: 8px; border: 1px solid gray; background-color: white; color: black; text-align: center;'>시스템 메트릭스를 가져올 수 없습니다.</td></tr>"
-        metrics_html += "</table>"
-        metrics_placeholder.markdown(metrics_html, unsafe_allow_html=True)
-
-        # 프로세스 메트릭스 가져오기
-        process_df = get_process_metrics()
-
-        # CPU Top 5 표시
-        if not process_df.empty:
-            cpu_top5_df = process_df.sort_values(by='CPU 사용률 (%)', ascending=False).head(5)[['프로세스명', 'CPU 사용률 (%)', '커맨드']]
-            cpu_top5_placeholder.markdown(generate_process_table_html(cpu_top5_df, 'CPU'), unsafe_allow_html=True)
-        else:
-            cpu_top5_placeholder.info("CPU Top5 데이터를 가져올 수 없습니다.")
-
-        # Memory Top 5 표시
-        if not process_df.empty:
-            memory_top5_df = process_df.sort_values(by='메모리 사용량 (MB)', ascending=False).head(5)[['프로세스명', '메모리 사용량 (MB)', '커맨드']]
-            memory_top5_placeholder.markdown(generate_process_table_html(memory_top5_df, 'Memory'), unsafe_allow_html=True)
-        else:
-            memory_top5_placeholder.info("Memory Top5 데이터를 가져올 수 없습니다.")
-
-        # 상태별 스케줄 카운트 업데이트 (동일 타이머 사용)
-        status_counts_df = fetch_status_counts(conn, selected_statuses, start_datetime_filter, end_datetime_filter)
-        status_count_placeholder.markdown(generate_status_count_html(status_counts_df), unsafe_allow_html=True)
+        st.markdown("<h4>스케줄 시스템 메트릭스</h4>", unsafe_allow_html=True)
+        display_system_metrics_table(st.session_state.get('system_metrics_data', {}))
 
 
-        st.session_state.last_metrics_update = current_run_time
-        needs_rerun = True # 업데이트 발생했으니 rerun 필요
+        st.markdown("<h4>CPU Top 5</h4>", unsafe_allow_html=True)
+        display_process_table(st.session_state.get('cpu_top5_data', []), 'cpu')
+
+        st.markdown("<h4>Memory Top 5</h4>", unsafe_allow_html=True)
+        display_process_table(st.session_state.get('memory_top5_data', []), 'memory')
 
 
-    # 그래프 및 스케줄 현황 테이블 업데이트 (GRAPH_UPDATE_INTERVAL 주기 또는 필터 변경 시)
-    # 필터 변경은 Streamlit 위젯의 기본 동작으로 rerun을 발생시킵니다.
-    # 여기서는 주기 업데이트 조건만 추가적으로 확인합니다.
-    time_since_graph_update = (current_run_time - st.session_state.last_graph_update).total_seconds()
-    if time_since_graph_update >= GRAPH_UPDATE_INTERVAL or not st.session_state.get('graph_displayed', False):
-        # graph_displayed 상태를 사용하여 첫 로딩 시 무조건 그리도록 함
-        st.session_state.graph_displayed = True
-
-        # 그래프 데이터 가져오기
-        graph_df = fetch_graph_data(conn, selected_statuses, start_datetime_filter, end_datetime_filter)
-
-        # 그래프 그리기 (Plotly)
-        if not graph_df.empty:
-            # Plotly에 사용할 색상 매핑 (모든 상태 포함하여 범례 색상 일관성 유지)
-            status_map = {s: COLOR_MAP.get(s, 'gray') for s in sorted(list(COLOR_MAP.keys()))}
-
-            if graph_type == "꺽은선":
-                fig = px.line(graph_df, x='HOURLY', y='CNT_STATUS', color='TASK_STATUS',
-                              title='시간대별 스케줄 현황',
-                              color_discrete_map=status_map)
-                fig.update_layout(plot_bgcolor='white', paper_bgcolor='white', font_color='black',
-                                  legend=dict(font=dict(color="black")),
-                                  xaxis=dict(color="black"),
-                                  yaxis=dict(color="black"))
-
-            else: # 막대 그래프
-                fig = px.bar(graph_df, x='HOURLY', y='CNT_STATUS', color='TASK_STATUS',
-                             title='시간대별 스케줄 현황', barmode='group', # 'stack' 가능
-                             color_discrete_map=status_map)
-                fig.update_layout(plot_bgcolor='white', paper_bgcolor='white', font_color='black',
-                                  legend=dict(font=dict(color="black")),
-                                  xaxis=dict(color="black"),
-                                  yaxis=dict(color="black"))
-
-            graph_placeholder.plotly_chart(fig, use_container_width=True)
-        else:
-            graph_placeholder.info("스케줄 현황 그래프 데이터를 가져올 수 없습니다.")
+    # --- 자동 새로고침 트리거 ---
+    # 1초 대기 후 스크립트 다시 실행하여 실시간 시계 및 데이터 업데이트 주기 제어
+    # time.sleep()은 Streamlit 메인 스레드를 멈추지만, 1초는 일반적으로 UI가 완전히 멈췄다고
+    # 인식하지 않는 선에서 주기적인 rerun을 보장합니다.
+    time.sleep(1)
+    st.rerun()
 
 
-        # 스케줄 현황 테이블 업데이트
-        schedule_table_df = fetch_table_data(conn, selected_statuses, start_datetime_filter, end_datetime_filter)
-        if not schedule_table_df.empty:
-            table_placeholder.markdown(generate_schedule_table_html(schedule_table_df), unsafe_allow_html=True)
-        else:
-            table_placeholder.info("스케줄 현황 테이블 데이터를 가져올 수 없습니다.")
-
-        st.session_state.last_graph_update = current_run_time
-        needs_rerun = True # 업데이트 발생했으니 rerun 필요
-
-
-    # --- 주기적 Rerun 타이머 ---
-    # 다음 업데이트까지 남은 시간 계산
-    # 각 타이머의 다음 예정 시간
-    next_metrics_update_time = st.session_state.last_metrics_update + datetime.timedelta(seconds=METRICS_UPDATE_INTERVAL)
-    next_graph_update_time = st.session_state.last_graph_update + datetime.timedelta(seconds=GRAPH_UPDATE_INTERVAL)
-
-    # 가장 가까운 다음 업데이트 예정 시간
-    next_update_time = min(next_metrics_update_time, next_graph_update_time)
-
-    # 다음 업데이트까지 남은 실제 시간
-    time_until_next_update = (next_update_time - current_run_time).total_seconds()
-
-    # 남은 시간이 있다면 대기 후 rerun, 없다면 즉시 rerun 또는 짧은 대기 후 rerun
-    # time_until_next_update가 음수일 수도 있으므로 (처리 시간 지연 등), 최소 대기 시간 설정
-    sleep_duration = max(0.1, time_until_next_update)
-
-    # print(f"Current: {current_run_time.strftime('%H:%M:%S')}, Next Metrics: {next_metrics_update_time.strftime('%H:%M:%S')}, Next Graph: {next_graph_update_time.strftime('%H:%M:%S')}, Sleep: {sleep_duration:.2f}s") # 디버깅용
-
-    time.sleep(sleep_duration)
-    st.rerun() # 전체 스크립트 다시 실행
-
-# 앱 실행 엔트리 포인트
 if __name__ == "__main__":
-    run_dashboard()
+    main()
