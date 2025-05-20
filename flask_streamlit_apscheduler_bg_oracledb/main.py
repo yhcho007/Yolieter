@@ -23,7 +23,6 @@ curl -X GET "http://localhost:5000/tasks?starttime=20250510010101&endtime=202505
 '''
 from flask import Flask, request, jsonify, make_response
 from flask_restx import Api, Resource, fields
-from flask_pyctuator.flask_pyctuator import FlaskPyctuator
 import pandas as pd
 import subprocess
 import signal
@@ -44,15 +43,7 @@ app = Flask(__name__)
 # Api 초기화는 그대로!
 api = Api(app, version=app_version, title='Task Management API',
           description='Oracle DB에 작업을 관리하는 간단 API야!') # 설명도 좀 더 친근하게 바꿔봤어!
-pyctuator = FlaskPyctuator(
-    app=app,
-    app_name=app_name,
-    app_version=app_version,
-    # 만약 스프링 부트 어드민과 연동한다면 아래 설정 추가
-    # endpoint_url="http://localhost:5000", # 앱이 실행될 주소
-    # registration_url="http://localhost:8080/instances", # SBA 서버 주소 (예시)
-    # auto_registration=True
-)
+
 # API 모델 정의 (이것도 그대로 쓰면 돼!)
 task_model = api.model('Task', {
     'taskname': fields.String(required=True, description='작업 이름'),
@@ -63,9 +54,32 @@ task_model = api.model('Task', {
 # 백그라운드 프로세스 객체를 저장할 변수
 background_process = None
 
-@app.route('/')
-def home():
-    return "Hello, Flask App is Running!"
+@app.route('/health', methods=['GET'])
+def health_check():
+    # 여기에서 애플리케이션의 실제 상태를 확인하는 로직을 추가할 수 있어.
+    # 예를 들어 데이터베이스 연결, 외부 서비스 상태 등등...
+
+    # 모든 체크가 성공했다고 가정하고 'UP' 상태를 반환할게.
+    # 만약 문제가 있다면 'DOWN'으로 바꾸고 HTTP 상태 코드도 503 등으로 설정할 수 있어.
+    app_status = "UP"
+    status_code = 200 # OK
+
+    # 좀 더 상세한 정보를 포함하고 싶으면 이렇게 딕셔너리 형태로 반환하면 좋아.
+    # (Spring Boot Actuator처럼)
+    response_payload = {
+        "status": app_status,
+        "details": {
+            # 여기에 각 컴포넌트의 상태를 추가할 수 있어.
+            # 예: "database": {"status": "UP", "message": "Connection successful"}
+            # 예: "external_api": {"status": "UP", "responseTime": "50ms"}
+            "service": {"status": "UP", "message": "Service is running"}
+        }
+    }
+
+    # Flask에서 JSON 응답을 보낼 때는 jsonify 함수를 사용하는 게 좋아.
+    # Reddit에서도 JSON 형태 반환을 추천하더라고 [[5]](https://www.reddit.com/r/flask/comments/1kolnus/why_does_my_flask_health_endpoint_show_nothing_at/).
+    return jsonify(response_payload), status_code
+
 
 # API 리소스 정의 (이 부분도 그대로!)
 @api.route('/tasks')
@@ -251,6 +265,6 @@ if __name__ == '__main__':
 
     logger.info("Flask 서버 시작 중...")
     # Flask 앱 실행
-    app.run(debug=False, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=5000)
 
 
