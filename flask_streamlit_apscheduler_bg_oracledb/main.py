@@ -46,8 +46,7 @@ api = Api(app, version=app_version, title='Task Management API',
           description='Oracle DB에 작업을 관리하는 간단 API야!') # 설명도 좀 더 친근하게 바꿔봤어!
 pyctuator = FlaskPyctuator(
     app=app,
-    app_name=app_name,
-    app_version=app_version,
+    app_name=app_name
     # 만약 스프링 부트 어드민과 연동한다면 아래 설정 추가
     # endpoint_url="http://localhost:5000", # 앱이 실행될 주소
     # registration_url="http://localhost:8080/instances", # SBA 서버 주소 (예시)
