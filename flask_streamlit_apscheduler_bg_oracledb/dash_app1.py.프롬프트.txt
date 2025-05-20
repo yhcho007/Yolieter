@@ -1,26 +1,51 @@
 너는 python 전문가야. 화면 전체 폭에 딱 맞게 streamlit, oracledb 를 사용해서 데쉬보드 웹페이지를 만들어줘. 
-브라우저 탭에 "스케줄데쉬보드" 로 표시해주고,, 
-"시간대별 스케줄 현황" 첯번째 쿼리 
-"SELECT HOURLY, TASK_STATUS, count(TASK_STATUS) as cnt_status from (SELECT TO_CHAR(subprocee_starttime,'YYYY-MM-DD HH24:MI') AS hourly, taskname, task_status FROM task )GROUP BY HOURLY,TASK_STATUS"
-를 이전 12시간 이후 12시간으로 읽어서, 결과로 x축 HOURLY, 세로축 cnt_status 를 TASK_STATUS 별로 꺽은선 그래프를 표시하고, 
-그아래에는 "스케줄 등록 현황" 두번째 쿼리
-"SELECT taskid, subprocee_starttime, taskname, task_status FROM task" 를 표로 표시하고 결과 row 가 10건이 넘어가면 세로 스크롤을 만들어주고,
-그아래에는 CPU 사용률,메모리 사용률,디스크 사용률,네트워크 Input (KB),네트워크 Output (KB) 을
-한 행에, 예를들어 CPU 사용률	7.0%	메모리 사용률	92.4%	디스크 사용률	72.6%	네트워크 Input (KB)	654735.09 KB	네트워크 Output (KB)	606254.14 KB 이렇게 표시해줘.
-그 아래에 총 메모리,사용 중,사용 가능 메모리도, 예를들어  총 메모리: 7.99 GB, 사용 중: 7.38 GB, 사용 가능: 0.61 GB 이렇게 만들어줘.
-그 아래에는 CPU 사용률 상위 프로세스 (Top 5), Memory 사용률 상위 프로세스 (Top 5) 세로로 화면을 양분해서 평행하게 만들어줘.
-이 데쉬보드의 내용은 3초마다 업데이트 되도록 만들어줘. 화면 백그라운드를 검은색으로 표시하고 그래프와 표는 그 보색들로 표시되서 사람 눈에 확실히 구분되게 표시하도록 하고, 
-처음 1~2초만 표시되고 그래프가 사라지는데, query1의 결과를 3초마다 읽어와서 계속 표시하도록 수정해줘. 
-세번째 쿼리
-"SELECT HOURLY, sum(cnt_status) AS total_cnt from
-(SELECT HOURLY, TASK_STATUS, COUNT(TASK_STATUS) as cnt_status
-FROM (
-    SELECT TO_CHAR(subprocee_starttime,'YYYY-MM-DD HH24:MI') AS hourly,
-           taskname,task_status
-    FROM task
-    WHERE subprocee_starttime BETWEEN (SYSTIMESTAMP - INTERVAL '12' HOUR) AND (SYSTIMESTAMP + INTERVAL '12' HOUR)
-)
-GROUP BY HOURLY, TASK_STATUS
-ORDER BY HOURLY, TASK_STATUS
-)
-GROUP BY HOURLY" 로 그래프에 같은 houly 에 toal_count 를 세로축에 표시하고, total_count 꺽은선을 그래프에 추가해 표시하도록,  다시 코드를 만들어줘.
+데쉬보드의 화면 구성
+맨위 가운데, H1 사이즈로  "스케줄데쉬보드" 표시하고, 
+맨위 오른쪽 H1 사이즈로 실시간으로 YYYY-MM-DD 24HH:MI:SS 표시해줘.
+그 아래 화면을 세로 3:1 비율로 레이아웃을 나눠줘. 
+비율 3 영역 맨위에 H3 사이즈로 "스케줄 현황" 타이틀 써주고,
+그 아래는 "스케줄 현황 그래프" 영역이야. 
+그 아래는 "스케줄 검색 조건" 영역이야. 
+그 아래는 "스케줄 현황 테이블" 영역이야. 
+비율 1 영역 맨위에 H4 사이즈로 "상태별 스케줄 카운트" 타이틀 써주고, 그 아래,
+"상태별 스케줄 카운트 테이블"을 표시해.
+그 아래는 H4 사이즈로 "스케줄 시스템 메트릭스" 를 표시해.
+그 아래는 스케줄 "시스템 메트릭스 정보"를 실시간 업데이트 해서 보여주고,
+그 아래는 H4 사이즈로 "CPU Top5" 를 표시해.
+그 아래는 CPU 부하를 가장 많이 사용하는 프로세스 정보를 실시간 업데이트 해서 보여주고,
+그 아래는 H4 사이즈로 "Memory Top5" 를 표시해.
+그 아래는 Memory 를 가장 많이 사용하는 프로세스 정보를 실시간 업데이트 해서 보여줘.
+비율 3 영역에 표시하고 동작할 세부사항은 다음가 같애.
+"스케줄 현황 그래프" 세로축은 상태별 스케줄 건수를 표시하고 가로축은 24시간 이전시간, 24시간 이후 시간의 범위를 실시간으로 업데이트해. 1분마다 그래프 내용은 없데이트 돼.
+"스케줄 검색 조건"은 "스케줄 상태"를 여러 항목 선택 가능한 콤보박스, "그래프 종류" 콤보 박스, 날짜 시간 선택 가능한 "시작시간 켈린더", " - ", "끝시간 켈린더", "ON, OFF 콤보박스" 를 표시해.
+그래프 종류는 "꺽은선", "막대" 그래프 두 종류야. 
+"스케줄 현황 테이블" 는 "스케줄 현황 그래프" 의 내용을 table 로 표시해.
+"스케줄 현황 그래프"는 "스케줄 검색 조건" 에서 "ON, OFF 콤보박스" 가 OFF 이면, 아래 쿼리와 같이 24시간 이전시간, 24시간 이후 시간이지만, "ON, OFF 콤보박스" 가 "ON" 이면,
+(SYSTIMESTAMP - INTERVAL '24' HOUR) 는 "시작 시간 켈린더"에서 선택한 시간, (SYSTIMESTAMP + INTERVAL '24' HOUR) 는 "끝시간 켈린더" 에서 선택한 시간 
+쿼리조건이 바꿔어서 쿼리 결과를 표시해.
+-- 쿼리1
+SELECT HOURLY, TASK_STATUS, COUNT(TASK_STATUS) as cnt_status
+    FROM (
+        SELECT TO_CHAR(subprocee_starttime,'YYYY-MM-DD HH24') AS hourly,
+               taskname, task_status
+        FROM task
+        WHERE subprocee_starttime BETWEEN (SYSTIMESTAMP - INTERVAL '24' HOUR) AND (SYSTIMESTAMP + INTERVAL '24' HOUR)
+    )
+    GROUP BY HOURLY, TASK_STATUS ORDER BY HOURLY
+
+"스케줄 현황 테이블"은 "스케줄 검색 조건" 에서 "ON, OFF 콤보박스" 가 OFF 이면, 아래 쿼리와 같이 24시간 이전시간, 24시간 이후 시간이지만, "ON, OFF 콤보박스" 가 "ON" 이면,
+(SYSTIMESTAMP - INTERVAL '24' HOUR) 는 "시작 시간 켈린더"에서 선택한 시간, (SYSTIMESTAMP + INTERVAL '24' HOUR) 는 "끝시간 켈린더" 에서 선택한 시간으로
+쿼리조건이 바꿔어서 쿼리 결과를 표시해.
+-- 쿼리2
+SELECT subprocee_starttime, taskname, task_status FROM task WHERE subprocee_starttime BETWEEN (SYSTIMESTAMP - INTERVAL '12' HOUR) AND (SYSTIMESTAMP + INTERVAL '12' HOUR)
+"스케줄 검색 조건"에서 "스케줄 상태"는 "R" 대기상태, "X" 실행중, "S" 완료종료, "F" Fail종료, "K" 강제종료 값을 갖고, 복수개 선택하능하며, 선택한 값들로, 
+-- 쿼리1, -- 쿼리2 에 WHERE 절에 task_status IN (선택된 상태값들) 로 변경해서 쿼리하고, 결과를 "스케줄 현황 그래프", "스케줄 현황 테이블"에 표시해.
+비율 1 영역에 표시하고 동작할 세부사항은 다음가 같애.
+"상태별 스케줄 카운트 테이블", 은 -- 쿼리2 에 WHERE 절에 task_status IN (선택된 상태값들) 로 변경해서 쿼리한 task_status 별 카운트를 테이블로 표시해.
+"시스템 메트릭스 정보"는 "CPU 사용률", "메모리 사용률", "디스크 사용률", "네트워크 Input", "네트워크 Output", 
+"총 메모리 사이즈","메모리 사용 중 사이즈", "메모리 사용가능 사이즈" 를 3초마다 업데이트 하여 표시하고,
+"CPU Top5" 는 Cpu를 가장 많이 사용하는 프로세스를 Cpu부하가 큰 순서로, 프로세스명, CPU부하율, 커맨드 를 테이블로 표시하고, 커맨드는 풍선글로 전체 명령문을 표시할 수 있도록 해줘.
+"Memory Top5" 는 Memory를 가장 많이 사용하는 프로세스를 memory 사용율이 큰 순서로, 프로세스명, 메모리 사용 사이즈, 커맨드 를 테이블로 표시하고, 커맨드는 풍선글로 전체 명령문을 표시할 수 있도록 해줘.
+데쉬보드 전체 배경은 검은색, 타이틀은 노란색, 그래프와 표 배경은 흰색, 글씨는 검은색으로 표시하고, 표의 테두리는 회색, "상태별 스케줄 카운트 테이블" 상태별 각 행의 글자색, 
+그래프 범례와 그래프 색은 스케줄 상태에 따라 "R" 대기상태는 회색, "X" 실행중은 파란색, "S" 완료종료는 초녹색, "F" Fail종료는 노랑색, "K" 강제종료 는 빨강색으로 표시해.
+이렇게 동작하는 python 코드를 만들어줘.

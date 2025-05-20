@@ -22,7 +22,8 @@ curl -X GET "http://localhost:5000/tasks?starttime=20250510010101&endtime=202505
 
 '''
 from flask import Flask, request, jsonify, make_response
-from flask_restx import Api, Resource, fields # <-- 여기를 flask_restx로 바꿨어!
+from flask_restx import Api, Resource, fields
+from flask_pyctuator.flask_pyctuator import FlaskPyctuator
 import pandas as pd
 import subprocess
 import signal
@@ -37,11 +38,21 @@ logger = log_handler.getloghandler("main")
 db_handler = DBHandler()
 dbconn = db_handler.get_db_connection(logger)
 
+app_name = "TaskScheduleApp"
+app_version = "1.0.0"
 app = Flask(__name__)
 # Api 초기화는 그대로!
-api = Api(app, version='1.0', title='Task Management API',
+api = Api(app, version=app_version, title='Task Management API',
           description='Oracle DB에 작업을 관리하는 간단 API야!') # 설명도 좀 더 친근하게 바꿔봤어!
-
+pyctuator = FlaskPyctuator(
+    app=app,
+    app_name=app_name,
+    app_version=app_version,
+    # 만약 스프링 부트 어드민과 연동한다면 아래 설정 추가
+    # endpoint_url="http://localhost:5000", # 앱이 실행될 주소
+    # registration_url="http://localhost:8080/instances", # SBA 서버 주소 (예시)
+    # auto_registration=True
+)
 # API 모델 정의 (이것도 그대로 쓰면 돼!)
 task_model = api.model('Task', {
     'taskname': fields.String(required=True, description='작업 이름'),
@@ -51,6 +62,10 @@ task_model = api.model('Task', {
 
 # 백그라운드 프로세스 객체를 저장할 변수
 background_process = None
+
+@app.route('/')
+def home():
+    return "Hello, Flask App is Running!"
 
 # API 리소스 정의 (이 부분도 그대로!)
 @api.route('/tasks')
