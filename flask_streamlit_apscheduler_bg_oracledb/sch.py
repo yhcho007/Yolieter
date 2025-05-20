@@ -23,8 +23,8 @@ thread_lock = threading.Lock()
 def fetch_tasks():
     global dbconn
     # Select tasks ready to run (status 'R') and whose start time is now or in the past
-    query = ("SELECT taskid, taskname, subprocee_starttime, task_status FROM TESTCHO.TASK WHERE task_status = 'R' "
-             "AND subprocee_starttime <= SYSDATE")
+    query = ("SELECT taskid, taskname, subprocee_starttime, task_status FROM TESTCHO.TASK " +
+             "WHERE task_status = 'R' AND subprocee_starttime BETWEEN SYSDATE AND (SYSDATE + INTERVAL '5' SECOND")
     try:
         tasks_df = pd.read_sql(query, dbconn)
         return tasks_df
