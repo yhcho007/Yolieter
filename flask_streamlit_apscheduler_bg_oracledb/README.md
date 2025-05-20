@@ -89,7 +89,7 @@ Python 3.12.3
 
 ### requirements.txt
 ```bash
-Flask==3.0.3
+Flask==2.2.5
 flask_restx==1.3.0
 APScheduler==4.0.0a6
 oracledb==3.1.0
