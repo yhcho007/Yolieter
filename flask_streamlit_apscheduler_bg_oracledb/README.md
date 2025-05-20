@@ -91,7 +91,6 @@ Python 3.12.3
 ```bash
 Flask==3.0.3
 flask_restx==1.3.0
-flask-pyctuator==0.1.1
 APScheduler==4.0.0a6
 oracledb==3.1.0
 pandas==2.2.3
