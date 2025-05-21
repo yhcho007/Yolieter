@@ -53,5 +53,5 @@ SELECT subprocee_starttime, taskname, task_status FROM task WHERE subprocee_star
 데쉬보드의 전체 배경색은 검은색이야. "스케줄 검색 조건"에 "스케줄 상태","그래프 종류" ,"시작시간 켈린더", " - ", "끝시간 켈린더", "ON, OFF 콤보박스" 글자색은 노란색으로 표시해.
 db데이터 조회시는 st.cache_data 또는 st.cache_resource를 사용하고, show_spinner=False 로 해줘.
 "실시간 시계", "스케줄 현황 그래프", "스케줄 현황 테이블", "상태별 스케줄 카운트 테이블", "시스템 메트릭스 정보", "CPU Top5", "Memory Top5" 에 그래프, 테이블은 
-st.experimental_memo 와 st.session_state 를 사용해서 업데이트 해줘. st.rerun은 처음 시작 할때 한번만 사용해.
+st.experimental_memo 와 st.session_state 를 사용해서 업데이트 해줘. 
 이렇게 동작하는 python 코드를 만들어줘. 
