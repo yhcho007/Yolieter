@@ -103,7 +103,7 @@ if 'selected_statuses' not in st.session_state:
 if 'graph_type' not in st.session_state:
     st.session_state.graph_type = "꺽은선" # 기본 그래프 종류
 if 'use_custom_time' not in st.session_state:
-    st.session_state.use_custom_time = "OFF (24시간 전후)" # 기본 시간 범위 (위젯 표시 텍스트로 변경)
+    st.session_state.use_custom_time = "OFF (24시간 전후)" # 기본 자동/수동 (위젯 표시 텍스트로 변경)
 if 'start_date' not in st.session_state:
     st.session_state.start_date = datetime.datetime.now().date() - datetime.timedelta(days=1)
 if 'start_time' not in st.session_state: # time_input은 time 객체만 반환
@@ -383,27 +383,13 @@ def display_schedule_table(table_df):
          st.info("🤔 표시할 스케줄 현황 테이블 데이터가 없습니다.")
 
 def display_status_count_table(table_df):
-    """상태별 스케줄 카운트 테이블을 표시하고 행 색상을 적용해줘."""
+    """상태별 스케줄 카운트 테이블을 표시하고 행 색상 및 가독성 높은 글자색을 적용해줘."""
     st.markdown("<h4>상태별 스케줄 카운트</h4>", unsafe_allow_html=True)
     if not table_df.empty:
         # 상세 테이블 데이터에서 상태별 카운트 계산
         status_counts_df = table_df['TASK_STATUS'].value_counts().reset_index()
         status_counts_df.columns = ['TASK_STATUS', 'COUNT']
-
-        # 상태별 색상 함수 (Pandas 스타일링 API 사용)
-        def color_status_rows(row):
-            status = row['TASK_STATUS']
-            # STATUS_COLORS 딕셔너리에서 색상 코드를 가져와. 없으면 기본값(흰색) 사용
-            color_code = STATUS_COLORS.get(status, 'white')
-            # 행의 모든 셀에 적용할 CSS 스타일 문자열 리스트 반환
-            # 배경색을 설정하고 글자색을 검은색으로 강제해서 가독성 확보
-            return [f'background-color: {color_code}; color: black !important;'] * len(row)
-
-        # Pandas 스타일링 API를 사용하여 데이터프레임에 스타일 적용
-        st.dataframe(
-            status_counts_df.style.apply(color_status_rows, axis=1),
-            use_container_width=True
-        )
+        st.dataframe(status_counts_df, use_container_width=True)
     else:
          st.info("🤔 표시할 상태별 스케줄 카운트 데이터가 없습니다.")
 
@@ -480,12 +466,12 @@ with col3:
         )
         st.session_state.graph_type = graph_type_widget  # 위젯 값으로 세션 상태 업데이트
 
-    with search_col8:  # ON/OFF는 마지막 컬럼으로 이동
-        # 시간 범위 선택 (ON/OFF) 콤보박스
+    with search_col8:  # 자동/수동는 마지막 컬럼으로 이동
+        # 자동/수동 선택 (자동/수동) 콤보박스
         use_custom_time_widget = st.selectbox(
-            "시간 범위 선택",
-            ["OFF", "ON"],  # 사용자에게 더 명확하게 표시
-            index=0 if st.session_state.use_custom_time == "OFF" else 1,
+            "자동/수동 선택",
+            ["자동", "수동"],  # 사용자에게 더 명확하게 표시
+            index=0 if st.session_state.use_custom_time == "자동" else 1,
             key="use_custom_time_select"
         )
         st.session_state.use_custom_time = use_custom_time_widget  # 위젯 값 그대로 세션 상태 업데이트
@@ -496,7 +482,7 @@ with col3:
             "시작일",
             value=st.session_state.start_date,
             key="start_date_input",
-            disabled=(st.session_state.use_custom_time == "OFF")  # OFF일 때는 비활성화
+            disabled=(st.session_state.use_custom_time == "자동")  # OFF일 때는 비활성화
         )
         st.session_state.start_date = start_date_widget
 
@@ -506,7 +492,7 @@ with col3:
             value=st.session_state.start_time,
             key="start_time_input",
             step=60  # 1분 단위
-            , disabled=(st.session_state.use_custom_time == "OFF")  # OFF일 때는 비활성화
+            , disabled=(st.session_state.use_custom_time == "자동")  # OFF일 때는 비활성화
         )
         st.session_state.start_time = start_time_widget
 
@@ -520,7 +506,7 @@ with col3:
             "종료일",
             value=st.session_state.end_date,
             key="end_date_input",
-            disabled=(st.session_state.use_custom_time == "OFF")  # OFF일 때는 비활성화
+            disabled=(st.session_state.use_custom_time == "자동")  # OFF일 때는 비활성화
         )
         st.session_state.end_date = end_date_widget
 
@@ -530,12 +516,12 @@ with col3:
             value=st.session_state.end_time,
             key="end_time_input",
             step=60  # 1분 단위
-            , disabled=(st.session_state.use_custom_time == "OFF")  # OFF일 때는 비활성화
+            , disabled=(st.session_state.use_custom_time == "자동")  # OFF일 때는 비활성화
         )
         st.session_state.end_time = end_time_widget
 
-    # 실제 쿼리에 사용할 시간 범위 결정 (datetime 객체로 조합)
-    if st.session_state.use_custom_time == "ON (선택 범위)":
+    # 실제 쿼리에 사용할 자동/수동 결정 (datetime 객체로 조합)
+    if st.session_state.use_custom_time == "수동":
         # 선택한 날짜와 시간을 조합하여 datetime 객체 생성
         try:
             query_start_datetime = datetime.datetime.combine(st.session_state.start_date, st.session_state.start_time)
