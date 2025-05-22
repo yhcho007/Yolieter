@@ -1,0 +1,16 @@
+그래도 넌 최고의 python 개발자야.
+flask 에서 actuator 에서 하듯이 health GET API , task 설정 POST, task 목록 조회 GET api 를 제공하는데,
+health GET API 제외한 api는 요청시,
+header 에 x-user-id 를 보고, x-user-id 가  https:127.0.0.1:9119 서버에 x-user-id를 파라미터로 GET 했을때, 200 응답이면,
+api 에 진입해서 기능을 실행하고, 아니면, 401 리턴하고, "api 사용 권한이 없습니다." 를  리턴하도록 해줘.
+task 설정 POST은 taskname, startconfition, taskcontents, requestor, modifier, result, createdate, modifieddate, useyn
+정보를 oracledb 에 저장하고, task 목록 조회 GET api 는 taskname, requestor, modifier, date( startdate, enddate )를
+optional 하지만 taskname, requestor,modifier,date 중 하나는 입력 값이 있어야하고,
+taskname, requestor,modifier 는 oracledb 에서 select 할때 where 절로 검색한 결과를 리턴하고,
+date( startdate, enddate )는 startconfition의 내용이 crontab  스크립트의 notation 인데,
+launchdate 라는 정보로 YYYYMMDD 24HHMISS  값으로 파싱하여,
+useyn 값이 'Y' 이고 launchdate 가 startdate ~ enddate 기간 동안에 해당하면,
+응답을 taskname, requestor,modifier, launchdate  dictionary 의 리스트로 응답하는 python 코드를 만들어줘.
+startcondition 에 대해 다시 설명 하자면, sql 쿼리에 startconfition 컬엄은 crontab 스크립트와 동일하게,
+예를 들어 "5 4 * * *" 이렇게 저장되면, 매일 04시05분 에 해당하고,
+또 다른 예로, "5,30,55 0,12 1,6 6,12 *" 이면, 6월과 12월에만 매월 1일과 6일 정각 5분, 30분, 55분, 오전 12시, 오후 12시에 해당되.
