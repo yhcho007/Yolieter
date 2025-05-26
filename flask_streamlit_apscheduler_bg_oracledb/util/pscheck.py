@@ -10,6 +10,7 @@ def find_python_processes_by_cmdline():
 
     # 모든 실행 중인 프로세스 정보를 가져오되, pid, name, cmdline 만 요청해요.
     for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+        pinfo = None
         try:
             pinfo = proc.info
 
@@ -24,7 +25,7 @@ def find_python_processes_by_cmdline():
 
                  # 합쳐진 command line 문자열 안에 'python'이 포함되어 있는지 확인해요.
                  # 대소문자 구분 없이 찾고 싶다면 .lower()를 사용할 수 있어.
-                 if 'python' in full_cmdline:
+                 if 'py' in full_cmdline:
                      python_processes_info.append({
                          'pid': pinfo['pid'],
                          'name': pinfo['name'],
@@ -47,8 +48,6 @@ def find_python_processes_by_cmdline():
 
 # 이제 함수를 사용해서 'python' command 라인을 가진 프로세스들을 찾아보자!
 if __name__ == "__main__":
-    print("'python' command line을 가진 프로세스 확인 중...")
-
     try:
         # find_python_processes_by_cmdline 함수를 호출해서 결과를 가져와요.
         python_processes = find_python_processes_by_cmdline()
