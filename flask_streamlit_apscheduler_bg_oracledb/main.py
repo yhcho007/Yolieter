@@ -23,6 +23,7 @@ curl -X GET "http://localhost:5000/tasks?starttime=20250510010101&endtime=202505
 '''
 from flask import Flask, request, jsonify, make_response
 from flask_restx import Api, Resource, fields
+from datetime import datetime, date, time
 import pandas as pd
 import subprocess
 import signal
@@ -30,6 +31,7 @@ import sys
 import oracledb
 from common.dbhandler import DBHandler
 from common.loghandler import LogHandler
+from util.sch_arg_test import generate_schedule_times
 
 log_handler = LogHandler()
 logger = log_handler.getloghandler("main")
@@ -47,8 +49,16 @@ api = Api(app, version=app_version, title='Task Management API',
 # API 모델 정의 (이것도 그대로 쓰면 돼!)
 task_model = api.model('Task', {
     'taskname': fields.String(required=True, description='작업 이름'),
-    'subprocee_starttime': fields.String(required=True, description='시작 시간 (YYYY-MM-DD HH24:MI:SS 형식)'),
-    'task_status': fields.String(required=True, description='작업 상태')
+    'start_date': fields.String(required=True, description='시작 날짜 (YYYY-MM-DD 형식)'),
+    'end_date': fields.String(required=True, description='끝 날짜 (YYYY-MM-DD 형식)'),
+    'start_time': fields.String(required=False, description='시작 시간 (24HH:MI:SS 형식)'),
+    'frequency': fields.String(required=False, description='빈도 daily, weekly, montly 중 택1'),
+    'specific_months': fields.String(required=False, description='특정 월 1~12, NULL is every month 예)1,2,3 = 1월,2월,3월'),
+    'specific_weekdays': fields.String(required=False, description='특정 요일, 0 is Monday, 6 is Sunday, NULL is every month 예) 0,1,5,6 = 월,토,일'),
+    'specific_days_of_month': fields.String(required=False, description='특정 날짜 1~31 NULL is every day 예)15,30 = 15일,30일'),
+    'use_yn': fields.String(required=False, description='사용 여부'),
+    'register': fields.String(required=False, description='등록자'),
+    'lastchanger': fields.String(required=False, description='마지막 수정자')
 })
 
 # 백그라운드 프로세스 객체를 저장할 변수
@@ -95,7 +105,7 @@ class TaskResource(Resource):
              return make_response(jsonify({"message": "요청 본문이 비어있거나 JSON 형식이 아니야."}), 400)
 
         # 필수 필드 확인
-        if not all(k in data for k in ('taskname', 'subprocee_starttime', 'task_status')):
+        if not all(k in data for k in ('taskname', 'start_date', 'end_date')):
              return make_response(jsonify({"message": "필수 정보(taskname, subprocee_starttime, task_status)가 부족해."}), 400)
 
         try:
@@ -103,14 +113,78 @@ class TaskResource(Resource):
                  return make_response(jsonify({"message": "데이터베이스 연결에 실패했어."}), 500)
 
             with dbconn.cursor() as cursor:
-                cursor.execute(
-                    "INSERT INTO TESTCHO.TASK (taskname, subprocee_starttime, task_status) VALUES (:taskname, TO_DATE(:subprocee_starttime, 'YYYY-MM-DD HH24:MI:SS'), :task_status)",
-                    taskname=data['taskname'],
-                    subprocee_starttime=data['subprocee_starttime'],
-                    task_status=data['task_status']
-                )
+                params = {}
+                params['taskname'] = data['taskname']
+                query = f'''SELECT TASKRESERVEID, TASKNAME FROM TESTCHO.TASKRESERVE WHERE TASKNAME = :taskname'''
+                tasks = pd.read_sql(query, dbconn, params=params)
+                if tasks.empty:
+                    cursor.execute(
+                        f'''INSERT INTO TESTCHO.TASKRESERVE (taskname, start_date, end_date, start_time, frequency,
+                        specific_months, specific_weekdays, specific_days_of_month, use_yn, register, "
+                        register, created_at, lastchanged_at) VALUES (:taskname, :start_date, :end_date, :start_time, :frequency, 
+                        :specific_months, :specific_weekdays, :specific_days_of_month, :use_yn, :register, 
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)''',
+                        taskname=data['taskname'], start_date=data['start_date'], end_date=data['end_date'],
+                        start_time = data.get('start_time'), frequency = data.get('frequency'),
+                        specific_months = data.get('specific_months'), specific_weekdays = data.get('specific_weekdays'),
+                        specific_days_of_month=data.get('specific_days_of_month'), use_yn='C',
+                        register=data.get('register')
+                    )
+                    dbconn.commit()
+                else:
+                    cursor.execute(
+                        f'''UPDATE TESTCHO.TASKRESERVE SET start_date=:start_date, end_date=:end_date,
+                        start_time=:start_time, frequency=:frequency, specific_months=:specific_months,
+                        specific_weekdays=:specific_weekdays, specific_days_of_month=:specific_days_of_month,
+                        use_yn='C', lastchanger=:lastchanger, lastchanged_at=CURRENT_TIMESTAMP "
+                        WHERE taskname = :taskname''',
+                        start_date=data['start_date'], end_date=data['end_date'],
+                        start_time = data['start_time'], frequency = data['frequency'],
+                        specific_months = data['specific_months'], specific_weekdays = data['specific_weekdays'],
+                        specific_days_of_month=data['specific_days_of_month'], lastchanger=data['lastchanger'],
+                        taskname=data['taskname'])
+                    dbconn.commit()
+
+                cursor.execute(f'''DELETE FROM TESTCHO.TASK WHERE taskname = :taskname''',taskname=data['taskname'])
                 dbconn.commit()
-            return make_response(jsonify({"message": "작업이 성공적으로 등록되었어!"}), 201)
+
+                query = f'''SELECT TASKRESERVEID, TASKNAME FROM TESTCHO.TASKRESERVE WHERE TASKNAME = :taskname 
+                        GROUP BY TASKRESERVEID, TASKNAME '''
+                tasks = pd.read_sql(query, dbconn, params=params)
+
+                taskreserveid = tasks['TASKRESERVEID']
+                taskname = data['taskname']
+                start_date = data['start_date']
+                end_date = data['end_date'],
+                start_time = None if data.get('start_time') is None else (time(int(data.get('start_time').split(':')[0]),
+                                                                               int(data.get('start_time').split(':')[1]),
+                                                                               int(data.get('start_time').split(':')[2])))
+                frequency = 'daily' if data.get('frequency') is None else data.get('frequency')
+                specific_months = None if data.get('specific_months') is None else list(map(int,' '.join(str(data.get('specific_months'))).split()))
+                specific_weekdays = None if data.get('specific_weekdays') is None else list(map(int,' '.join(str(data.get('specific_weekdays'))).split()))
+                specific_days_of_month = None if data.get('specific_days_of_month') is None else list(map(int,' '.join(str(data.get('specific_days_of_month'))).split()))
+                scheules = generate_schedule_times(
+                    start_date=start_date,
+                    end_date=end_date,
+                    start_time=start_time,
+                    frequency=frequency,
+                    specific_months=specific_months,
+                    specific_weekdays=specific_weekdays,
+                    specific_days_of_month=specific_days_of_month
+                )
+
+                for s in scheules:
+                    cursor.execute(
+                    f'''INSERT INTO TESTCHO.TASK (taskreserveid, taskname, subprocee_starttime, task_status, 
+                    created_at, lastchanged_at) VALUES (:taskreserveid, :taskname, :subprocee_starttime, 
+                    'R', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)''',
+                    taskreserveid=taskreserveid, taskname=data['taskname'], subprocee_starttime=s)
+                dbconn.commit()
+                '''
+                sch.py 는 task 테이블에 task_status ='R'이고 subprocee_starttime 이 5초이내 기동대기하여, 정각에 시작시면 됨.
+                '''
+
+                return make_response(jsonify({"message": "작업이 성공적으로 등록되었어!"}), 201)
         except oracledb.Error as e:
             logger.info(f"데이터베이스 오류: {e}")
             return make_response(jsonify({"message": f"데이터베이스 작업 중 오류가 발생했어: {e}"}), 500)
@@ -118,15 +192,13 @@ class TaskResource(Resource):
              logger.info(f"예상치 못한 오류 발생: {e}")
              return make_response(jsonify({"message": f"작업 등록 중 예상치 못한 오류가 발생했어: {e}"}), 500)
 
-
-
     @api.response(200, '성공!')
     @api.response(404, '작업을 찾지 못했어.')
     @api.doc(params={ # Swagger UI에 파라미터 설명을 추가할 수 있어!
         'taskid': {'description': 'Task ID로 필터링 (단일)', 'type': 'string'},
         'taskname': {'description': 'Task 이름으로 필터링', 'type': 'string'},
-        'starttime': {'description': '시작 시간 (YYYYMMDDHHMISS)', 'type': 'string'},
-        'endtime': {'description': '종료 시간 (YYYYMMDDHHMISS)', 'type': 'string'},
+        'startdate': {'description': '시작 시간 (YYYYMMDD)', 'type': 'string'},
+        'enddate': {'description': '종료 시간 (YYYYMMDD)', 'type': 'string'},
         'limit': {'description': '결과 개수 제한 (기본값: all)', 'type': 'integer'} # limit은 integer로 받는 게 좋아!
     })
     def get(self):
@@ -134,49 +206,91 @@ class TaskResource(Resource):
         """조건에 맞는 작업을 가져오는 API"""
         taskid = request.args.get('taskid')
         taskname = request.args.get('taskname')
-        starttime = request.args.get('starttime')  # YYYYMMDDHHMISS 형식
-        endtime = request.args.get('endtime')      # YYYYMMDDHHMISS 형식
+        start_date = request.args.get('startdate')  # YYYYMMDDHHMISS 형식
+        end_date = request.args.get('enddate')      # YYYYMMDDHHMISS 형식
         limit_str = request.args.get('limit', default='all') # 문자열로 받아서 처리
+        scope = request.args.get('scope')
 
-        query = "SELECT taskid, taskname, subprocee_starttime, task_status FROM TESTCHO.TASK WHERE 1=1"
-        params = {}
+        if scope == 'reaerved':
+            query = ("SELECT taskreserveid, taskname, start_date, end_date, start_time, frequency, specific_months," +
+                     "specific_weekdays, specific_days_of_month, use_yn, register, lastchanger, created_at, "
+                     "lastchanged_at   FROM TESTCHO.TASKRESERVE WHERE 1=1")
+            params = {}
 
-        if taskid:
-            query += " AND taskid = :taskid"
-            params['taskid'] = taskid
-        if taskname:
-            query += " AND taskname = :taskname"
-            params['taskname'] = taskname
-        if starttime:
-            # 입력 형식 확인 (최소한 길이)
-            if len(starttime) == 14:
-                # YYYY-MM-DD HH24:MI:SS 형식으로 변환
-                starttime_formatted = f"{starttime[:4]}-{starttime[4:6]}-{starttime[6:8]} {starttime[8:10]}:{starttime[10:12]}:{starttime[12:14]}"
-                query += " AND subprocee_starttime >= TO_DATE(:starttime, 'YYYY-MM-DD HH24:MI:SS')"
-                params['starttime'] = starttime_formatted
-            else:
-                # 시간 형식 오류 처리
-                return make_response(jsonify({"message": "starttime 형식이 YYYYMMDDHHMISS 여야 해!"}), 400)
+            if taskid:
+                query += " AND taskid = :taskid"
+                params['taskid'] = taskid
+            if taskname:
+                query += " AND taskname = :taskname"
+                params['taskname'] = taskname
+            if start_date:
+                # 입력 형식 확인 (최소한 길이)
+                if len(start_date) == 10:
+                    # YYYY-MM-DD HH24:MI:SS 형식으로 변환
+                    starttime_formatted = f"{start_date[:4]}-{start_date[5:7]}-{start_date[8:10]} 00:00:00"
+                    query += " AND lastchanged_at >= TO_DATE(:starttime, 'YYYY-MM-DD HH24:MI:SS')"
+                    params['starttime'] = starttime_formatted
+                else:
+                    # 시간 형식 오류 처리
+                    return make_response(jsonify({"message": "startdate 형식이 YYYY-MM-DD 여야 해!"}), 400)
 
-        if endtime:
-             # 입력 형식 확인 (최소한 길이)
-             if len(endtime) == 14:
-                endtime_formatted = f"{endtime[:4]}-{endtime[4:6]}-{endtime[6:8]} {endtime[8:10]}:{endtime[10:12]}:{endtime[12:14]}"
-                query += " AND subprocee_starttime < TO_DATE(:endtime, 'YYYY-MM-DD HH24:MI:SS')"
-                params['endtime'] = endtime_formatted
-             else:
-                # 시간 형식 오류 처리
-                return make_response(jsonify({"message": "endtime 형식이 YYYYMMDDHHMISS 여야 해!"}), 400)
+            if end_date:
+                # 입력 형식 확인 (최소한 길이)
+                if len(end_date) == 10:
+                    endtime_formatted = f"{end_date[:4]}-{end_date[4:6]}-{end_date[6:8]} 23:59:59"
+                    query += " AND lastchanged_at < TO_DATE(:endtime, 'YYYY-MM-DD HH24:MI:SS')"
+                    params['endtime'] = endtime_formatted
+                else:
+                    # 시간 형식 오류 처리
+                    return make_response(jsonify({"message": "enddate 형식이 YYYY-MM-DD 여야 해!"}), 400)
 
-        if limit_str != 'all':
-            try:
-                limit = int(limit_str)
-                query += " AND ROWNUM <= :limit"
-                query += " ORDER BY taskid ASC"
-                params['limit'] = limit
-            except ValueError:
-                 return make_response(jsonify({"message": "limit은 'all' 이거나 숫자로 입력해야 해!"}), 400)
+            if limit_str != 'all':
+                try:
+                    limit = int(limit_str)
+                    query += " AND ROWNUM <= :limit"
+                    query += " ORDER BY taskid ASC"
+                    params['limit'] = limit
+                except ValueError:
+                    return make_response(jsonify({"message": "limit은 'all' 이거나 숫자로 입력해야 해!"}), 400)
+        else:
+            query = "SELECT TASKID, TASKRESERVEID, TASKNAME, SUBPROCEE_STARTTIME, TASK_STATUS FROM TESTCHO.TASK WHERE 1=1"
+            params = {}
 
+            if taskid:
+                query += " AND taskid = :taskid"
+                params['taskid'] = taskid
+            if taskname:
+                query += " AND taskname = :taskname"
+                params['taskname'] = taskname
+            if start_date:
+                # 입력 형식 확인 (최소한 길이)
+                if len(start_date) == 10:
+                    # YYYY-MM-DD HH24:MI:SS 형식으로 변환
+                    starttime_formatted = f"{start_date[:4]}-{start_date[5:7]}-{start_date[8:10]} 00:00:00"
+                    query += " AND subprocee_starttime >= TO_DATE(:starttime, 'YYYY-MM-DD HH24:MI:SS')"
+                    params['starttime'] = starttime_formatted
+                else:
+                    # 시간 형식 오류 처리
+                    return make_response(jsonify({"message": "startdate 형식이 YYYY-MM-DD 여야 해!"}), 400)
+
+            if end_date:
+                # 입력 형식 확인 (최소한 길이)
+                if len(end_date) == 10:
+                    endtime_formatted = f"{end_date[:4]}-{end_date[4:6]}-{end_date[6:8]} 23:59:59"
+                    query += " AND subprocee_starttime < TO_DATE(:endtime, 'YYYY-MM-DD HH24:MI:SS')"
+                    params['endtime'] = endtime_formatted
+                else:
+                    # 시간 형식 오류 처리
+                    return make_response(jsonify({"message": "enddate 형식이 YYYY-MM-DD 여야 해!"}), 400)
+
+            if limit_str != 'all':
+                try:
+                    limit = int(limit_str)
+                    query += " AND ROWNUM <= :limit"
+                    query += " ORDER BY taskid ASC"
+                    params['limit'] = limit
+                except ValueError:
+                    return make_response(jsonify({"message": "limit은 'all' 이거나 숫자로 입력해야 해!"}), 400)
         try:
             if dbconn is None:
                  return make_response(jsonify({"message": "데이터베이스 연결에 실패했어."}), 500)

@@ -46,7 +46,7 @@
   "task_status": "S"
 }
 
-{
+{file:/C:/DEV/py/flask_streamlit_apscheduler_bg_oracledb/util/sch_arg_test%20프롬프트
   "taskname": "스케줄9",
   "subprocee_starttime": "2025-05-19 102101",
   "task_status": "K"
